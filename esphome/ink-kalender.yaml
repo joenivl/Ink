@@ -1,6 +1,6 @@
 # Ink – gezinskalender op de Seeed reTerminal E1003 (10,3" e-paper, liggend)
 #
-# - toont week, maand en notities uit Home Assistant
+# - twee schermen (tabs bovenin): week met notities, en maand
 # - knoppen om Home Assistant te bedienen
 # - afspraken inspreken via de ingebouwde microfoon
 #
@@ -18,8 +18,15 @@ substitutions:
   touch_mirror_x: "false"
   touch_mirror_y: "false"
 
-  # Lettertype (Google Fonts). Handschrift: Kalam. Strakker: Roboto.
-  lettertype: Kalam
+  # Lettertype (Google Fonts). Patrick Hand heeft geen vette variant; met
+  # nep_vet: "true" worden koppen dubbel getekend. Voor bijv. Kalam of Roboto:
+  # lettertype_vet: "700" en nep_vet: "false".
+  lettertype: Patrick Hand
+  lettertype_vet: "400"
+  nep_vet: "true"
+
+  # Na zoveel tijd op het maandscherm terug naar de week.
+  terug_naar_week_na: 5min
 
   # Knoppen onderaan. Werkt met alles wat homeassistant.toggle snapt
   # (lampen, schakelaars, scripts, groepen). Naam leeg = knop verbergen.
@@ -275,8 +282,10 @@ binary_sensor:
       mode: INPUT_PULLUP
       inverted: true
     on_press:
-      - homeassistant.event:
-          event: esphome.ink_klaar
+      - script.execute:
+          id: wissel_scherm
+          scherm: !lambda |-
+            return ink::staat().scherm == ink::SCHERM_WEEK ? ink::SCHERM_MAAND : ink::SCHERM_WEEK;
 
 i2s_audio:
   - id: i2s_mic
@@ -458,6 +467,33 @@ script:
           }
       - script.execute: ververs
 
+  - id: wissel_scherm
+    parameters:
+      scherm: int
+    then:
+      - lambda: |-
+          auto &s = ink::staat();
+          if (s.scherm != scherm) {
+            s.scherm = static_cast<ink::Scherm>(scherm);
+            ink::ververs_mask() |= ink::VOL;
+          }
+      - script.execute: ververs
+      - if:
+          condition:
+            lambda: return scherm != ink::SCHERM_WEEK;
+          then:
+            - script.execute: terug_naar_week
+          else:
+            - script.stop: terug_naar_week
+
+  - id: terug_naar_week
+    mode: restart
+    then:
+      - delay: ${terug_naar_week_na}
+      - script.execute:
+          id: wissel_scherm
+          scherm: !lambda return ink::SCHERM_WEEK;
+
   - id: tik
     parameters:
       zone: int
@@ -467,6 +503,15 @@ script:
             lambda: return zone != ink::GEEN;
           then:
             - script.execute: piep
+      # Tabs
+      - if:
+          condition:
+            lambda: return zone == ink::TAB_WEEK || zone == ink::TAB_MAAND;
+          then:
+            - script.execute:
+                id: wissel_scherm
+                scherm: !lambda |-
+                  return zone == ink::TAB_MAAND ? ink::SCHERM_MAAND : ink::SCHERM_WEEK;
       # Spreken
       - if:
           condition:
@@ -527,31 +572,31 @@ script:
 font:
   - file: gfonts://${lettertype}@400
     id: f_klein
-    size: 22
+    size: 24
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
   - file: gfonts://${lettertype}@400
     id: f_normaal
-    size: 26
+    size: 28
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-  - file: gfonts://${lettertype}@700
+  - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_vet
-    size: 26
+    size: 28
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-  - file: gfonts://${lettertype}@700
+  - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_kop
-    size: 34
+    size: 36
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-  - file: gfonts://${lettertype}@700
+  - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_groot
-    size: 52
+    size: 56
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
@@ -577,4 +622,4 @@ display:
       }
       const uint8_t mask = ink::ververs_mask();
       ink::ververs_mask() = 0;
-      ink::teken(it, s, {id(f_klein), id(f_normaal), id(f_vet), id(f_kop), id(f_groot)}, mask);
+      ink::teken(it, s, {id(f_klein), id(f_normaal), id(f_vet), id(f_kop), id(f_groot), ${nep_vet}}, mask);

@@ -3,15 +3,20 @@
 Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
 (10,3" e-paper, liggend), gekoppeld aan Home Assistant:
 
-- **Week en maand**: bovenaan de week, daaronder links de maand, net als op het whiteboard.
-- **Notities**: rechts, open taken uit een HA-takenlijst.
-- **Handschrift-look**: lettertype Kalam, een soort whiteboardstift.
+- **Twee schermen**, te wisselen met de tabs bovenin (of de linker witte knop):
+  - **Week**: zeven dagen naast elkaar, met daaronder de notities (open taken uit een
+    HA-takenlijst), net als op het whiteboard.
+  - **Maand**: het hele maandrooster. Na 5 minuten springt het scherm vanzelf terug
+    naar de week.
+- **Handschrift-look**: lettertype Patrick Hand.
 - **Knoppen**: vier knoppen om lampen, scripts en dergelijke in HA aan of uit te zetten.
 - **Afspraak inspreken** (alleen via de knop, geen wake word): tik op de knop en zeg bijvoorbeeld "zaterdag half drie
   verjaardag oma". Het scherm laat zien wat het begrepen heeft; pas na
   **Opslaan** komt de afspraak in de kalender.
 
-![Voorbeeld](docs/preview-rust.png)
+| Week | Maand |
+|---|---|
+| ![](docs/preview-week.png) | ![](docs/preview-maand.png) |
 
 | Inspreken | Voorstel | Melding |
 |---|---|---|
@@ -41,9 +46,6 @@ zie [Preview en tests](#preview-en-tests).*
 
 ## Bestanden
 
-Alles op het scherm is één scherm in verschillende toestanden: normaal, aan het
-luisteren, een voorstel ter bevestiging en een melding.
-
 | Pad | Wat |
 |---|---|
 | `esphome/ink-kalender.yaml` | ESPHome-config voor het scherm |
@@ -63,17 +65,21 @@ Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7
    "Kalendernaam voor de titel zetten" aan.
 2. **Notities** (optioneel): Instellingen → Apparaten en diensten → *Local To-do*,
    bijvoorbeeld een lijst "Notities".
-3. **AI-taak**: voeg een AI-integratie toe die AI-taken ondersteunt:
-   - *Ollama* draait helemaal lokaal, maar vraagt een redelijke pc of server.
-   - *OpenAI*, *Google Gemini* en *Anthropic* zijn cloud-diensten en kosten een paar cent per maand bij dit gebruik.
+3. **AI-taak**: voeg de integratie **OpenAI** toe (API-sleutel van
+   platform.openai.com; bij dit gebruik een paar cent per maand). Kies in de
+   integratie een *AI-taak* met model `gpt-4o-mini` of nieuwer en controleer dat
+   er een `ai_task.…`-entiteit is. Alternatieven zijn Google Gemini, Anthropic en
+   Ollama (lokaal, maar vraagt flinke hardware).
+4. **Spraak-naar-tekst**: lichte hardware kan lokaal Whisper niet goed aan voor
+   Nederlands. Kies een van deze twee:
+   - **Home Assistant Cloud** (Nabu Casa, abonnement): het eenvoudigst, snel en goed in Nederlands.
+   - **OpenAI Whisper** via de HACS-integratie *OpenAI Whisper Cloud*: dezelfde
+     OpenAI-sleutel, betalen per gebruik. De officiële OpenAI-integratie doet
+     (nog) geen spraak-naar-tekst.
 
-   Controleer onder de integratie dat er een `ai_task.…`-entiteit is.
-4. **Spraakassistent**: Instellingen → Spraakassistenten → *Assistent toevoegen*:
-   - Taal **Nederlands**.
-   - Spraak-naar-tekst: **Whisper** (add-on, lokaal) of **Home Assistant Cloud**.
-     Voor Nederlands lokaal minimaal het Whisper-model `small-int8`; op een Pi
-     is dat traag (enkele seconden). HA Cloud is snel en goed in Nederlands.
-   - Tekst-naar-spraak is niet nodig (het scherm heeft geen speaker).
+   Maak daarna een assistent: Instellingen → Spraakassistenten → *Assistent
+   toevoegen*, taal **Nederlands**, met die spraak-naar-tekst. Tekst-naar-spraak
+   is niet nodig (het scherm heeft geen speaker).
 
 ### 2. Scherm flashen
 
@@ -83,7 +89,7 @@ Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7
    via de *File editor*- of *Studio Code Server*-add-on.
 3. Pas bovenin `ink-kalender.yaml` de `substitutions` aan: de vier knoppen
    (`knopN_naam` en `knopN_entiteit`; een lege naam verbergt de knop) en eventueel
-   `lettertype` (elk Google Font, bijv. `Patrick Hand` of `Roboto`).
+   `lettertype` (elk Google Font; zie `docs/fonts-vergelijking.png`).
 4. Installeer. De eerste keer moet dat via USB-C vanaf een computer (Chrome of Edge):
    *Install → Manual download*, daarna flashen via <https://web.esphome.io>.
    Daarna gaan updates draadloos.
@@ -111,11 +117,12 @@ de kalender voor nieuwe afspraken, eventuele takenlijsten en de AI-taak.
 
 | | |
 |---|---|
+| **Week / Maand** (tabs bovenin) | Wisselen van scherm |
 | **Afspraak inspreken** (of de groene knop) | Tik, spreek, wacht. Tik nog een keer om te stoppen. |
 | **Opslaan / Annuleer** | Na het inspreken. Zonder keuze sluit het venster na 3 minuten. |
 | **HA-knoppen** | Zetten de entiteit aan of uit; zwart betekent aan. |
 | Rechter witte knop | Scherm volledig verversen |
-| Linker witte knop | Agenda opnieuw ophalen |
+| Linker witte knop | Wisselen tussen week en maand |
 
 ## Problemen oplossen
 

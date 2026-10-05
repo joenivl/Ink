@@ -1,5 +1,5 @@
 // Previews van het scherm met voorbeelddata.
-// Gebruik: preview <rust|luisteren|voorstel|melding>  > opdrachten.jsonl
+// Gebruik: preview <week|maand|luisteren|voorstel|melding>  > opdrachten.jsonl
 #include <cstring>
 
 #include "../../esphome/ink_kalender.h"
@@ -35,10 +35,10 @@ static const char *const VOORBEELD =
     "2026-11-02|08:30|Tandarts\n";
 
 int main(int argc, char **argv) {
-  const char *scenario = argc > 1 ? argv[1] : "rust";
+  const char *scenario = argc > 1 ? argv[1] : "week";
 
   BaseFont klein{"klein", 0}, normaal{"normaal", 1}, vet{"vet", 2}, kop{"kop", 3}, groot{"groot", 4};
-  ink::Fonts f{&klein, &normaal, &vet, &kop, &groot};
+  ink::Fonts f{&klein, &normaal, &vet, &kop, &groot, true};
 
   ink::Staat &s = ink::staat();
   s.vandaag = {2026, 10, 5};
@@ -53,7 +53,9 @@ int main(int argc, char **argv) {
   s.knoppen[2] = {"Tuin", false};
   s.knoppen[3] = {"Alles uit", false};
 
-  if (!std::strcmp(scenario, "luisteren")) {
+  if (!std::strcmp(scenario, "maand")) {
+    s.scherm = ink::SCHERM_MAAND;
+  } else if (!std::strcmp(scenario, "luisteren")) {
     s.status = ink::LUISTEREN;
   } else if (!std::strcmp(scenario, "voorstel")) {
     s.status = ink::VOORSTEL;

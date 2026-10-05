@@ -22,15 +22,15 @@ FONTS = HIER / "fonts"
 UIT = ROOT / "docs"
 
 # Moet overeenkomen met de font:-sectie in esphome/ink-kalender.yaml.
-FAMILIE = "Kalam"  # = substitution 'lettertype'
-FONT_DEFS = [  # (naam, gewicht, grootte)
-    ("klein", 400, 22),
-    ("normaal", 400, 26),
-    ("vet", 700, 26),
-    ("kop", 700, 34),
-    ("groot", 700, 52),
+FAMILIE = "Patrick Hand"  # = substitution 'lettertype'
+FONT_DEFS = [  # (naam, gewicht, grootte); Patrick Hand heeft alleen 400
+    ("klein", 400, 24),
+    ("normaal", 400, 28),
+    ("vet", 400, 28),
+    ("kop", 400, 36),
+    ("groot", 400, 56),
 ]
-SCENARIOS = ["rust", "luisteren", "voorstel", "melding"]
+SCENARIOS = ["week", "maand", "luisteren", "voorstel", "melding"]
 TEKENS = list(range(32, 0x250)) + [0x2013, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026]
 
 
