@@ -18,12 +18,12 @@ substitutions:
   touch_mirror_x: "false"
   touch_mirror_y: "false"
 
-  # Lettertype (Google Fonts). Patrick Hand heeft geen vette variant; met
-  # nep_vet: "true" worden koppen dubbel getekend. Voor bijv. Kalam of Roboto:
-  # lettertype_vet: "700" en nep_vet: "false".
-  lettertype: Patrick Hand
-  lettertype_vet: "400"
-  nep_vet: "true"
+  # Lettertype (Google Fonts). Voor een lettertype zonder vette variant, zoals
+  # Patrick Hand: lettertype_vet: "400" en nep_vet: "true" (koppen worden dan
+  # dubbel getekend).
+  lettertype: Kalam
+  lettertype_vet: "700"
+  nep_vet: "false"
 
   # Na zoveel tijd op het maandscherm terug naar de week.
   terug_naar_week_na: 5min

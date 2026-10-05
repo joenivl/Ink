@@ -8,7 +8,7 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
     HA-takenlijst), net als op het whiteboard.
   - **Maand**: het hele maandrooster. Na 5 minuten springt het scherm vanzelf terug
     naar de week.
-- **Handschrift-look**: lettertype Patrick Hand.
+- **Handschrift-look**: lettertype Kalam.
 - **Knoppen**: vier knoppen om lampen, scripts en dergelijke in HA aan of uit te zetten.
 - **Afspraak inspreken** (alleen via de knop, geen wake word): tik op de knop en zeg bijvoorbeeld "zaterdag half drie
   verjaardag oma". Het scherm laat zien wat het begrepen heeft; pas na

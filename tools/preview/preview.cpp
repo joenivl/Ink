@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
   const char *scenario = argc > 1 ? argv[1] : "week";
 
   BaseFont klein{"klein", 0}, normaal{"normaal", 1}, vet{"vet", 2}, kop{"kop", 3}, groot{"groot", 4};
-  ink::Fonts f{&klein, &normaal, &vet, &kop, &groot, true};
+  ink::Fonts f{&klein, &normaal, &vet, &kop, &groot, false};
 
   ink::Staat &s = ink::staat();
   s.vandaag = {2026, 10, 5};
