@@ -173,6 +173,7 @@ Het ligt helemaal aan of het apparaat wakker blijft of slaapt:
 |---|---|---|
 | Ink met **spaarstand uit**: altijd aan (wifi, touch, knoppen, inspreken) | ~185 mA | ca. 12–16 uur |
 | Ink met **spaarstand aan** (standaard, zie hieronder) | gemiddeld ~5–8 mA | **ca. 2–4 weken** (schatting) |
+| Ink met spaarstand aan, **alleen wekken met de knoppen** (`touch_wekt: "false"`) | gemiddeld ~2–3 mA | ca. 5–7 weken (schatting) |
 | ESPHome met deep sleep, elke 4 uur verversen (standaard) | 4–5 mA in slaap | 20–30 dagen |
 | Idem, met geoptimaliseerde slaapstand | < 0,1 mA in slaap | 3–6 maanden |
 | Seeed-opgave: 1× per dag verversen | – | tot 6 maanden |
