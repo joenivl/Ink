@@ -1,0 +1,53 @@
+// Eenheidstests voor de datum- en parse-logica in ink_kalender.h.
+#include <cassert>
+#include <cstdio>
+
+#include "../../esphome/ink_kalender.h"
+
+using namespace ink;
+
+int main() {
+  // Datum-rekenwerk
+  assert(dagnummer({1970, 1, 1}) == 0);
+  assert(weekdag({1970, 1, 1}) == 3);   // donderdag
+  assert(weekdag({2026, 10, 5}) == 0);  // maandag
+  assert(weekdag({2026, 10, 4}) == 6);  // zondag
+  for (int n = -1000; n < 30000; n += 7) {
+    const Datum d = van_dagnummer(n);
+    assert(dagnummer(d) == n);
+  }
+  assert((plus_dagen({2026, 12, 31}, 1) == Datum{2027, 1, 1}));
+  assert((plus_dagen({2028, 2, 28}, 1) == Datum{2028, 2, 29}));
+  assert((plus_dagen({2026, 3, 1}, -1) == Datum{2026, 2, 28}));
+
+  // ISO-weeknummers
+  assert(iso_week({2026, 10, 5}) == 41);
+  assert(iso_week({2026, 1, 1}) == 1);
+  assert(iso_week({2027, 1, 1}) == 53);  // vrijdag -> week 53 van 2026
+  assert(iso_week({2024, 12, 30}) == 1);
+
+  // Parsen
+  auto lijst = lees_afspraken(
+      "2026-10-05|09:30|Pilates\r\n"
+      "2026-10-05|-|Elise jarig\n"
+      "kapot\n"
+      "2026-13-01|-|Ongeldige maand\n"
+      "2026-10-06||Lege tijd\n"
+      "2026-10-07|10:00|Titel met | streep");
+  assert(lijst.size() == 4);
+  assert(lijst[0].tijd == "09:30" && lijst[0].titel == "Pilates");
+  assert(lijst[1].tijd.empty() && lijst[1].titel == "Elise jarig");
+  assert(lijst[2].tijd.empty() && lijst[2].titel == "Lege tijd");
+  assert(lijst[3].titel == "Titel met | streep");
+  assert(lees_afspraken("").empty());
+
+  auto regels = lees_regels("a\n\nb\r\n");
+  assert(regels.size() == 2 && regels[1] == "b");
+
+  // UTF-8
+  const std::string s = "café";
+  assert(utf8_terug(s, s.size()) == 3);
+
+  std::puts("alle tests geslaagd");
+  return 0;
+}

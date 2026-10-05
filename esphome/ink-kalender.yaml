@@ -1,0 +1,579 @@
+# Ink – gezinskalender op de Seeed reTerminal E1003 (10,3" e-paper, staand)
+#
+# - toont week, maand en notities uit Home Assistant
+# - knoppen om Home Assistant te bedienen
+# - afspraken inspreken via de ingebouwde microfoon
+#
+# Hoort bij de blueprint homeassistant/blueprints/ink_kalender.yaml.
+# Installatie: zie README.md.
+
+substitutions:
+  naam: ink-kalender  # niet veranderen: de blueprint verwacht deze naam
+  vriendelijke_naam: Ink kalender
+  tijdzone: Europe/Amsterdam
+
+  # Staand ophangen. Staat het beeld op z'n kop? Zet rotatie op 270 en
+  # wissel touch_mirror_x/touch_mirror_y om (zie README, "Touch klopt niet").
+  rotatie: "90"
+  touch_swap_xy: "true"
+  touch_mirror_x: "false"
+  touch_mirror_y: "true"
+
+  # Knoppen onderaan. Werkt met alles wat homeassistant.toggle snapt
+  # (lampen, schakelaars, scripts, groepen). Naam leeg = knop verbergen.
+  knop1_naam: Woonkamer
+  knop1_entiteit: light.woonkamer
+  knop2_naam: Keuken
+  knop2_entiteit: light.keuken
+  knop3_naam: Tuin
+  knop3_entiteit: light.tuin
+  knop4_naam: Alles uit
+  knop4_entiteit: script.alles_uit
+
+esphome:
+  name: ${naam}
+  friendly_name: ${vriendelijke_naam}
+  min_version: 2026.7.0
+  includes:
+    - ink_kalender.h
+  on_boot:
+    - priority: 600
+      then:
+        - output.turn_on: mic_stroom
+        - pcf8563.read_time: rtc_tijd
+        - lambda: |-
+            auto &s = ink::staat();
+            s.knoppen[0].naam = "${knop1_naam}";
+            s.knoppen[1].naam = "${knop2_naam}";
+            s.knoppen[2].naam = "${knop3_naam}";
+            s.knoppen[3].naam = "${knop4_naam}";
+    - priority: -100
+      then:
+        - lambda: ink::ververs_mask() |= ink::VOL;
+        - script.execute: ververs
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  hardware_uart: UART0
+
+api:
+  encryption:
+    key: !secret api_sleutel
+  on_client_connected:
+    - delay: 5s
+    # Vraag Home Assistant om de agenda te sturen.
+    - homeassistant.event:
+        event: esphome.ink_klaar
+  actions:
+    - action: toon_agenda
+      variables:
+        afspraken: string
+        notities: string
+      then:
+        - lambda: |-
+            auto &s = ink::staat();
+            const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken || s.ruw_notities != notities;
+            if (nieuw) {
+              s.ruw_afspraken = afspraken;
+              s.ruw_notities = notities;
+              s.afspraken = ink::lees_afspraken(afspraken);
+              s.notities = ink::lees_regels(notities);
+              s.data_ontvangen = true;
+            }
+            if (nieuw || id(wacht_op_agenda)) {
+              id(wacht_op_agenda) = false;
+              ink::ververs_mask() |= ink::VOL;
+            }
+        - script.execute: ververs
+    - action: toon_voorstel
+      variables:
+        titel: string
+        datum: string
+        begin: string
+        eind: string
+        gehoord: string
+      then:
+        - lambda: |-
+            auto &s = ink::staat();
+            s.voorstel = {titel, datum, begin, eind, gehoord};
+            s.status = ink::VOORSTEL;
+            ink::ververs_mask() |= ink::VENSTER | ink::BALK;
+        - script.execute: ververs
+        - script.execute: venster_sluiten_na_tijd
+    - action: toon_melding
+      variables:
+        tekst: string
+      then:
+        - script.execute:
+            id: melding
+            tekst: !lambda return tekst;
+
+ota:
+  - platform: esphome
+    password: !secret ota_wachtwoord
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_wachtwoord
+  ap:
+    ssid: Ink-Kalender
+    password: !secret herstel_wachtwoord
+
+captive_portal:
+
+spi:
+  id: epd_spi
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+  miso_pin: GPIO8
+
+i2c:
+  id: i2c_bus
+  sda: GPIO19
+  scl: GPIO20
+
+globals:
+  - id: wacht_op_agenda
+    type: bool
+    initial_value: "false"
+  - id: spraak_tekst_ontvangen
+    type: bool
+    initial_value: "false"
+  - id: minuten_offline
+    type: int
+    initial_value: "0"
+
+time:
+  - platform: pcf8563
+    id: rtc_tijd
+    address: 0x51
+    update_interval: never
+  - platform: homeassistant
+    id: ha_tijd
+    timezone: ${tijdzone}
+    on_time_sync:
+      - pcf8563.write_time: rtc_tijd
+    on_time:
+      # Nieuwe dag: alles opnieuw (ook tegen 'ghosting').
+      - seconds: 5
+        minutes: 0
+        hours: 0
+        then:
+          - lambda: ink::ververs_mask() |= ink::VOL;
+          - script.execute: ververs
+
+interval:
+  - interval: 1min
+    then:
+      - lambda: |-
+          auto &s = ink::staat();
+          const bool verbonden = global_api_server->is_connected();
+          id(minuten_offline) = verbonden ? 0 : id(minuten_offline) + 1;
+          // Pas na 5 minuten 'geen verbinding' tonen; een herstart van HA duurt even.
+          const bool nu = id(minuten_offline) < 5;
+          if (nu != s.verbonden) {
+            s.verbonden = nu;
+            ink::ververs_mask() |= ink::VOL;
+          }
+      - script.execute: ververs
+
+sensor:
+  - platform: sht4x
+    temperature:
+      id: temperatuur
+      name: Temperatuur
+      on_value:
+        - lambda: ink::staat().temperatuur = x;
+    humidity:
+      id: vochtigheid
+      name: Luchtvochtigheid
+      on_value:
+        - lambda: ink::staat().vochtigheid = x;
+    update_interval: 5min
+
+text_sensor:
+  - platform: homeassistant
+    id: knop1_status
+    entity_id: ${knop1_entiteit}
+    internal: true
+    on_value:
+      - script.execute:
+          id: knop_status
+          nr: 0
+          status: !lambda return x;
+  - platform: homeassistant
+    id: knop2_status
+    entity_id: ${knop2_entiteit}
+    internal: true
+    on_value:
+      - script.execute:
+          id: knop_status
+          nr: 1
+          status: !lambda return x;
+  - platform: homeassistant
+    id: knop3_status
+    entity_id: ${knop3_entiteit}
+    internal: true
+    on_value:
+      - script.execute:
+          id: knop_status
+          nr: 2
+          status: !lambda return x;
+  - platform: homeassistant
+    id: knop4_status
+    entity_id: ${knop4_entiteit}
+    internal: true
+    on_value:
+      - script.execute:
+          id: knop_status
+          nr: 3
+          status: !lambda return x;
+
+output:
+  - platform: gpio
+    id: mic_stroom
+    pin: GPIO38
+  - platform: ledc
+    id: zoemer
+    pin: GPIO45
+    frequency: 2000Hz
+
+binary_sensor:
+  - platform: gpio
+    id: knop_groen
+    pin:
+      number: GPIO3
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - script.execute:
+          id: tik
+          zone: !lambda return ink::SPREEK;
+  - platform: gpio
+    id: knop_wit_rechts
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lambda: ink::ververs_mask() |= ink::VOL;
+      - script.execute: ververs
+  - platform: gpio
+    id: knop_wit_links
+    pin:
+      number: GPIO5
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - homeassistant.event:
+          event: esphome.ink_klaar
+
+i2s_audio:
+  - id: i2s_mic
+    i2s_lrclk_pin: GPIO42
+
+microphone:
+  - platform: i2s_audio
+    id: mic
+    i2s_audio_id: i2s_mic
+    adc_type: external
+    pdm: true
+    i2s_din_pin: GPIO41
+
+voice_assistant:
+  id: spraak
+  microphone: mic
+  on_listening:
+    - script.execute:
+        id: zet_status
+        status: !lambda return ink::LUISTEREN;
+  on_stt_vad_end:
+    - script.execute:
+        id: zet_status
+        status: !lambda return ink::VERWERKEN;
+  on_stt_end:
+    - lambda: id(spraak_tekst_ontvangen) = true;
+    - if:
+        condition:
+          lambda: return !x.empty();
+        then:
+          - script.execute:
+              id: zet_status
+              status: !lambda return ink::VERWERKEN;
+          - homeassistant.event:
+              event: esphome.ink_spraak
+              data:
+                tekst: !lambda return x;
+          - script.execute: wacht_op_ha
+        else:
+          - script.execute:
+              id: melding
+              tekst: Ik heb niets verstaan. Probeer het nog eens.
+  on_error:
+    - if:
+        condition:
+          lambda: return !id(spraak_tekst_ontvangen) && ink::staat().status != ink::RUST;
+        then:
+          - script.execute:
+              id: melding
+              tekst: !lambda |-
+                return "Spraakherkenning mislukt: " + message;
+  on_end:
+    - if:
+        condition:
+          lambda: return !id(spraak_tekst_ontvangen) && ink::staat().status == ink::LUISTEREN;
+        then:
+          - script.execute:
+              id: zet_status
+              status: !lambda return ink::RUST;
+
+touchscreen:
+  - platform: gt911
+    id: touch
+    display: epd
+    interrupt_pin: GPIO2
+    reset_pin: GPIO48
+    transform:
+      swap_xy: ${touch_swap_xy}
+      mirror_x: ${touch_mirror_x}
+      mirror_y: ${touch_mirror_y}
+    on_touch:
+      - lambda: |-
+          ESP_LOGI("ink", "Aanraking op x=%d, y=%d", touch.x, touch.y);
+      - script.execute:
+          id: tik
+          zone: !lambda return ink::raak(ink::staat(), touch.x, touch.y);
+
+script:
+  # Vraagt een schermverversing aan voor alles wat in ververs_mask staat.
+  # Volledig = GC16 (grijstinten, knippert even), anders DU (snel).
+  - id: ververs
+    mode: queued
+    max_runs: 10
+    then:
+      - if:
+          condition:
+            lambda: return ink::ververs_mask() != 0;
+          then:
+            - it8951.update:
+                id: epd
+                mode: !lambda |-
+                  return (ink::ververs_mask() & ink::VOL) ? it8951::UPDATE_MODE_GC16 : it8951::UPDATE_MODE_DU;
+
+  - id: piep
+    mode: restart
+    then:
+      - output.turn_on: zoemer
+      - output.set_level:
+          id: zoemer
+          level: 50%
+      - delay: 60ms
+      - output.turn_off: zoemer
+
+  - id: zet_status
+    parameters:
+      status: int
+    then:
+      - lambda: |-
+          auto &s = ink::staat();
+          const bool venster_was_open = ink::venster_open(s);
+          s.status = static_cast<ink::Status>(status);
+          // Venster dicht = de maand eronder moet terug, dus volledig tekenen.
+          ink::ververs_mask() |= (venster_was_open && !ink::venster_open(s)) ? ink::VOL : ink::BALK;
+      - script.execute: ververs
+
+  - id: melding
+    parameters:
+      tekst: string
+    then:
+      - script.stop: wacht_op_ha
+      - lambda: |-
+          auto &s = ink::staat();
+          s.melding = tekst;
+          s.status = ink::MELDING;
+          ink::ververs_mask() |= ink::VENSTER | ink::BALK;
+      - script.execute: ververs
+      - script.execute: venster_sluiten_na_tijd
+
+  # Geen voorstel van Home Assistant binnen een minuut? Dan melden.
+  - id: wacht_op_ha
+    mode: restart
+    then:
+      - delay: 60s
+      - if:
+          condition:
+            lambda: return ink::staat().status == ink::VERWERKEN;
+          then:
+            - script.execute:
+                id: melding
+                tekst: Geen antwoord van Home Assistant. Staat de Ink-automatisering aan?
+
+  - id: venster_sluiten_na_tijd
+    mode: restart
+    then:
+      - delay: 3min
+      - if:
+          condition:
+            lambda: return ink::venster_open(ink::staat());
+          then:
+            - script.execute:
+                id: zet_status
+                status: !lambda return ink::RUST;
+
+  # Na 'Opslaan' wachten we op de nieuwe agenda uit HA, zodat het scherm
+  # maar één keer ververst. Komt die niet, dan toch verversen.
+  - id: wacht_op_agenda_timeout
+    mode: restart
+    then:
+      - delay: 15s
+      - if:
+          condition:
+            lambda: return id(wacht_op_agenda);
+          then:
+            - lambda: |-
+                id(wacht_op_agenda) = false;
+                ink::ververs_mask() |= ink::VOL;
+            - script.execute: ververs
+
+  - id: knop_status
+    parameters:
+      nr: int
+      status: string
+    then:
+      - lambda: |-
+          auto &k = ink::staat().knoppen[nr];
+          const bool aan = status == "on" || status == "open" || status == "playing" || status == "home";
+          if (aan != k.aan) {
+            k.aan = aan;
+            ink::ververs_mask() |= ink::BALK;
+          }
+      - script.execute: ververs
+
+  - id: tik
+    parameters:
+      zone: int
+    then:
+      - if:
+          condition:
+            lambda: return zone != ink::GEEN;
+          then:
+            - script.execute: piep
+      # Spreken
+      - if:
+          condition:
+            lambda: return zone == ink::SPREEK;
+          then:
+            - if:
+                condition: voice_assistant.is_running
+                then:
+                  - voice_assistant.stop:
+                else:
+                  - script.stop: venster_sluiten_na_tijd
+                  - lambda: id(spraak_tekst_ontvangen) = false;
+                  - script.execute:
+                      id: zet_status
+                      status: !lambda return ink::LUISTEREN;
+                  - voice_assistant.start:
+      # Home Assistant-knoppen
+      - if:
+          condition:
+            lambda: return zone >= ink::KNOP1 && zone < ink::KNOP1 + 4;
+          then:
+            - homeassistant.action:
+                action: homeassistant.toggle
+                data:
+                  entity_id: !lambda |-
+                    static const char *const entiteiten[] = {
+                        "${knop1_entiteit}", "${knop2_entiteit}", "${knop3_entiteit}", "${knop4_entiteit}"};
+                    return std::string(entiteiten[zone - ink::KNOP1]);
+      # Voorstel opslaan
+      - if:
+          condition:
+            lambda: return zone == ink::OPSLAAN;
+          then:
+            - homeassistant.event:
+                event: esphome.ink_opslaan
+                data:
+                  titel: !lambda return ink::staat().voorstel.titel;
+                  datum: !lambda return ink::staat().voorstel.datum;
+                  begin: !lambda return ink::staat().voorstel.begin;
+                  eind: !lambda return ink::staat().voorstel.eind;
+            - script.stop: venster_sluiten_na_tijd
+            - lambda: |-
+                ink::staat().status = ink::RUST;
+                id(wacht_op_agenda) = true;
+                ink::ververs_mask() |= ink::BALK;
+            - script.execute: ververs
+            - script.execute: wacht_op_agenda_timeout
+      # Annuleren / OK
+      - if:
+          condition:
+            lambda: return zone == ink::ANNULEER || zone == ink::OK;
+          then:
+            - script.stop: venster_sluiten_na_tijd
+            - script.execute:
+                id: zet_status
+                status: !lambda return ink::RUST;
+
+font:
+  - file: gfonts://Roboto
+    id: f_klein
+    size: 20
+    bpp: 4
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+  - file: gfonts://Roboto
+    id: f_normaal
+    size: 24
+    bpp: 4
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+  - file: gfonts://Roboto@700
+    id: f_vet
+    size: 24
+    bpp: 4
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+  - file: gfonts://Roboto@700
+    id: f_kop
+    size: 30
+    bpp: 4
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+  - file: gfonts://Roboto@700
+    id: f_groot
+    size: 46
+    bpp: 4
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+
+display:
+  - platform: it8951
+    id: epd
+    spi_id: epd_spi
+    model: seeed-reterminal-e1003
+    rotation: ${rotatie}
+    update_interval: never
+    auto_clear_enabled: false
+    grayscale: true
+    full_update_every: 30
+    lambda: |-
+      auto &s = ink::staat();
+      auto nu = id(ha_tijd).now();
+      if (!nu.is_valid())
+        nu = id(rtc_tijd).now();
+      if (nu.is_valid()) {
+        s.vandaag = {nu.year, nu.month, nu.day_of_month};
+        s.tijd_geldig = true;
+      }
+      const uint8_t mask = ink::ververs_mask();
+      ink::ververs_mask() = 0;
+      ink::teken(it, s, {id(f_klein), id(f_normaal), id(f_vet), id(f_kop), id(f_groot)}, mask);

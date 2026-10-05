@@ -1,72 +1,170 @@
 # Ink – gezinskalender op de reTerminal E1003
 
-Doel: de whiteboard-planner op de koelkast vervangen door een Seeed reTerminal E1003
-(10,3" e-paper), gekoppeld aan Home Assistant. Kalender tonen, HA bedienen en
-afspraken toevoegen, liefst met spraak.
+Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
+(10,3" e-paper, staand opgehangen), gekoppeld aan Home Assistant:
 
-## Hardware (E1003)
+- **Week en maand**: bovenaan de week, daaronder de maand, net als op het whiteboard.
+- **Notities**: open taken uit een HA-takenlijst.
+- **Knoppen**: vier knoppen om lampen, scripts en dergelijke in HA aan of uit te zetten.
+- **Afspraak inspreken**: tik op de knop en zeg bijvoorbeeld "zaterdag half drie
+  verjaardag oma". Het scherm laat zien wat het begrepen heeft; pas na
+  **Opslaan** komt de afspraak in de kalender.
+
+![Voorbeeld](docs/preview-rust.png)
+
+| Inspreken | Voorstel | Melding |
+|---|---|---|
+| ![](docs/preview-luisteren.png) | ![](docs/preview-voorstel.png) | ![](docs/preview-melding.png) |
+
+*De previews worden gemaakt door de echte tekencode (`esphome/ink_kalender.h`),
+zie [Preview en tests](#preview-en-tests).*
+
+## Zo werkt het
+
+```
+ Local Calendar ─┐                         ┌─► week / maand / notities
+ To-do-lijst ────┼─► blueprint (HA) ──────►│      (ESPHome-actie toon_agenda)
+                 │         ▲               │
+                 │         │ esphome.ink_spraak (tekst)
+                 │   AI-taak: tekst ─► titel/datum/tijd ─► toon_voorstel
+                 │         │
+                 └─◄ calendar.create_event ◄── esphome.ink_opslaan (na "Opslaan")
+```
+
+- De spraakherkenning loopt via de normale **Assist-pijplijn** van HA (Whisper of HA Cloud).
+- Een **AI-taak** (`ai_task.generate_data`) maakt van de zin een afspraak. Begrippen
+  als "volgende week dinsdag" en "half drie" worden zo goed opgepakt.
+- Het scherm ververst alleen als er iets verandert. Een volledige verversing
+  (grijstinten, knippert ~1 s) volgt bij nieuwe agenda-data en om middernacht. Knoppen
+  en pop-ups gebruiken de snelle DU-modus.
+
+## Bestanden
+
+| Pad | Wat |
+|---|---|
+| `esphome/ink-kalender.yaml` | ESPHome-config voor het scherm |
+| `esphome/ink_kalender.h` | Layout, kalenderlogica en touchvlakken (C++) |
+| `esphome/secrets.example.yaml` | Voorbeeld voor `secrets.yaml` |
+| `homeassistant/blueprints/ink_kalender.yaml` | Blueprint: agenda naar het scherm, spraak naar afspraak |
+| `tools/preview/` | Tests en PNG-previews zonder hardware |
+
+## Installatie
+
+Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7 of nieuwer**).
+
+### 1. Home Assistant voorbereiden
+
+1. **Kalender**: je hebt al een Local Calendar. Wil je per gezinslid de naam
+   zien? Maak dan meerdere Local Calendars aan en zet in de blueprint
+   "Kalendernaam voor de titel zetten" aan.
+2. **Notities** (optioneel): Instellingen → Apparaten en diensten → *Local To-do*,
+   bijvoorbeeld een lijst "Notities".
+3. **AI-taak**: voeg een AI-integratie toe die AI-taken ondersteunt:
+   - *Ollama* draait helemaal lokaal, maar vraagt een redelijke pc of server.
+   - *OpenAI*, *Google Gemini* en *Anthropic* zijn cloud-diensten en kosten een paar cent per maand bij dit gebruik.
+
+   Controleer onder de integratie dat er een `ai_task.…`-entiteit is.
+4. **Spraakassistent**: Instellingen → Spraakassistenten → *Assistent toevoegen*:
+   - Taal **Nederlands**.
+   - Spraak-naar-tekst: **Whisper** (add-on, lokaal) of **Home Assistant Cloud**.
+     Voor Nederlands lokaal minimaal het Whisper-model `small-int8`; op een Pi
+     is dat traag (enkele seconden). HA Cloud is snel en goed in Nederlands.
+   - Tekst-naar-spraak is niet nodig (het scherm heeft geen speaker).
+
+### 2. Scherm flashen
+
+1. Zet in de ESPHome Builder-add-on je secrets (wifi, API-sleutel, OTA-wachtwoord),
+   zie `esphome/secrets.example.yaml`.
+2. Zet `ink-kalender.yaml` en `ink_kalender.h` samen in `/config/esphome/`. Dat kan
+   via de *File editor*- of *Studio Code Server*-add-on.
+3. Pas bovenin `ink-kalender.yaml` de `substitutions` aan: de vier knoppen
+   (`knopN_naam` en `knopN_entiteit`). Een lege naam verbergt de knop.
+4. Installeer. De eerste keer moet dat via USB-C vanaf een computer (Chrome of Edge):
+   *Install → Manual download*, daarna flashen via <https://web.esphome.io>.
+   Daarna gaan updates draadloos.
+
+### 3. Koppelen
+
+1. HA ziet het nieuwe ESPHome-apparaat; voeg het toe.
+2. Ga naar **ESPHome → Ink kalender → Configureren** en zet
+   **"Allow the device to perform Home Assistant actions"** aan. Zonder deze
+   instelling werken de knoppen en het inspreken niet.
+3. Kies bij het apparaat onder *Configuratie → Assistent* de Nederlandse assistent uit stap 1.
+
+### 4. Blueprint
+
+- Is deze repo publiek? Ga dan naar Instellingen → Automatiseringen → Blueprints →
+  *Blueprint importeren* en plak:
+  `https://github.com/joenivl/Ink/blob/main/homeassistant/blueprints/ink_kalender.yaml`
+- Is de repo privé? Kopieer het bestand dan naar
+  `/config/blueprints/automation/ink/ink_kalender.yaml` en herlaad de automatiseringen.
+
+Maak daarna een automatisering van de blueprint. Je kiest daarin de kalenders,
+de kalender voor nieuwe afspraken, eventuele takenlijsten en de AI-taak.
+
+## Bediening
 
 | | |
 |---|---|
-| Scherm | 10,3" e-paper, 1404 × 1872, 16 grijstinten |
-| Refresh | volledig scherm ~3 s, deel van het scherm 2–3 s (DU-modus, snel maar met ghosting) |
-| Touch | capacitief (GT911) |
-| SoC | ESP32-S3, 8 MB PSRAM, 32 MB flash, microSD |
-| Audio | PDM-microfoon en een buzzer. **Geen speaker.** |
-| Sensoren | temperatuur en luchtvochtigheid (SHT4x), RTC (PCF8563) |
-| Accu | 3000 mAh (~6 maanden bij 1 refresh per dag) |
+| **Afspraak inspreken** (of de groene knop) | Tik, spreek, wacht. Tik nog een keer om te stoppen. |
+| **Opslaan / Annuleer** | Na het inspreken. Zonder keuze sluit het venster na 3 minuten. |
+| **HA-knoppen** | Zetten de entiteit aan of uit; zwart betekent aan. |
+| Rechter witte knop | Scherm volledig verversen |
+| Linker witte knop | Agenda opnieuw ophalen |
 
-## Software-opties
+## Problemen oplossen
 
-1. **ESPHome (aanbevolen)**: wordt officieel ondersteund vanaf ESPHome 2026.7.0
-   (display en touch). Volledige HA-integratie, en touchzones roepen HA-acties aan.
-   - Voorbeeld van Seeed: `Seeed-Projects/esphome-reterminal-e1003-workspace`
-     (bitmap als achtergrond, kleine DU-updates per regio, touchzones die HA-services aanroepen)
-   - Voorbeeld van de community: `ar0v3r/reTerminal-E1003-ESPHome`
-     (Google Calendar en weer via HA, deep sleep met een goed geoptimaliseerd stroomverbruik)
-2. **SenseCraft HMI / Seeedash**: de standaardfirmware van Seeed, gemaakt met een
-   drag-and-drop editor. Snel resultaat, maar beperkt.
-3. **TRMNL (BYOD)**: TRMNL ondersteunt de E1003 (firmware 1.8.7 of nieuwer) en heeft
-   een kant-en-klare kalender-plugin. Alleen weergave: geen HA-bediening en geen invoer.
+**Touch klopt niet (je tikt op de ene knop en een andere reageert).**
+De draairichting van de touchlaag ten opzichte van het scherm heb ik afgeleid uit
+het voorbeeldproject van Seeed. Op echte hardware is dat nog niet gecontroleerd.
+Bekijk de logs (ESPHome → *Logs*): bij elke tik staat er `Aanraking op x=…, y=…`.
+Linksboven hoort ongeveer (0, 0) te geven en rechtsonder ongeveer (1404, 1872).
 
-## Architectuur
+| Situatie | `touch_mirror_x` | `touch_mirror_y` |
+|---|---|---|
+| x klopt, y is omgekeerd | ongewijzigd | omdraaien |
+| y klopt, x is omgekeerd | omdraaien | ongewijzigd |
+| Beide omgekeerd | omdraaien | omdraaien |
 
+Hangt het scherm andersom (beeld op z'n kop)? Zet `rotatie: "270"`, `touch_mirror_x: "true"`
+en `touch_mirror_y: "false"`.
+
+**Inspreken doet niets.** Controleer stap 3.2 en 3.3 en kijk of de automatisering
+draait (Instellingen → Automatiseringen → *Ink kalender* → Traces).
+
+**Microfoon te zacht.** Voeg onder `voice_assistant:` bijvoorbeeld `volume_multiplier: 3.0` toe.
+
+**"Geen verbinding" bovenaan.** Het scherm heeft vijf minuten geen contact met HA gehad.
+
+## Preview en tests
+
+Zonder hardware de layout bekijken en de logica testen (vraagt `g++` en Python met Pillow):
+
+```bash
+pip install pillow
+python3 tools/preview/render.py
 ```
-Google/iCloud/Local calendar ──► Home Assistant ──► ESPHome-API ──► E1003
-                                     ▲    │
-             spraak (PDM-mic) ───────┘    └─► calendar.create_event
-```
 
-- **Weergave**: kalenderdata komt uit HA (`calendar.get_events`). Het scherm wordt
-  op het apparaat zelf getekend: weekoverzicht bovenaan, maandoverzicht onderaan,
-  net als het huidige whiteboard. Een alternatief is een PNG laten renderen in HA,
-  die het apparaat dan ophaalt met `online_image`. Dat geeft meer layoutvrijheid.
-- **HA bedienen**: vaste touchzones (lampen, scènes, enzovoort). Rekening houden met
-  ~0,5–3 s vertraging. Prima voor knoppen, niet geschikt voor schuifregelaars.
-- **Afspraak via spraak**:
-  1. Tik op "+ Afspraak". Het apparaat neemt op via `voice_assistant` (push-to-talk,
-     een speaker is niet nodig).
-  2. HA Assist-pipeline, STT: Nederlands werkt het best met HA Cloud (Nabu Casa).
-     Lokaal Whisper kan ook, maar is traag of minder goed tenzij je sterke hardware hebt.
-  3. De tekst gaat naar een LLM (AI Task of een conversation agent), die er
-     `{titel, start, eind, wie}` van maakt.
-  4. Het scherm toont "Za 10 okt 11:00 – Verjaardag Sylvia [Opslaan] [Annuleer]".
-  5. Bij Opslaan volgt `calendar.create_event` (werkt in elk geval met Google Calendar
-     en Local Calendar).
+Dit compileert `ink_kalender.h` tegen een nagebootste ESPHome-display, draait de
+tests in `tools/preview/tests.cpp` en schrijft `docs/preview-*.png`. Voorbeelddata
+staat in `tools/preview/preview.cpp`.
 
-## Aandachtspunten
+## Status
 
-- Touch en spraak vragen dat het apparaat wakker blijft. Gebruik dan USB-C-voeding;
-  de accu is alleen geschikt voor de modus "alleen weergave" met deep sleep.
-- Een wake word dat altijd luistert (`micro_wake_word`) is mogelijk op de S3, maar
-  kost stroom. Push-to-talk ligt meer voor de hand.
-- DU-refresh geeft ghosting. Doe periodiek een volledige GC16-refresh, bijvoorbeeld
-  's nachts of elk uur.
-- Voor ESPHome is versie 2026.7.0 of nieuwer nodig.
+Getest zonder hardware:
+- `esphome config` slaagt met ESPHome 2026.9.1.
+- `ink_kalender.h` compileert tegen de echte ESPHome-display-headers.
+- De datum- en parsetests slagen.
+- De blueprint-templates zijn doorgerekend met voorbeelddata.
 
-## Open vragen
+Nog niet getest:
+- een volledige firmware-build en de werking op het apparaat zelf;
+- de touch-oriëntatie en de microfoongevoeligheid (zie *Problemen oplossen*).
 
-- Welke kalender gebruiken we: Google, iCloud of Outlook?
-- Waar draait HA (Green, Pi of NUC), en hebben we Nabu Casa?
-- Komt er een stopcontact of USB-kabel bij de koelkast?
-- Welke HA-bediening willen we op het scherm?
+## Ideeën voor later
+
+- Wake word ("Hey Jarvis") via `micro_wake_word`. Dat kan op de ESP32-S3, maar
+  het scherm moet dan aan de stroom hangen.
+- Spraakopdrachten voor HA zelf ("doe de lampen uit"), naast afspraken.
+- Kleur of initialen per gezinslid.
+- Weersverwachting in de kop.

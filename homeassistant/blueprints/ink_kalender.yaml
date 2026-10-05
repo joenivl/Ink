@@ -1,0 +1,302 @@
+blueprint:
+  name: Ink kalender
+  description: >
+    Stuurt agenda's en notities naar de Ink e-paper kalender (reTerminal E1003)
+    en zet ingesproken zinnen om in een afspraak. Het scherm vraagt eerst om
+    bevestiging; pas na 'Opslaan' komt de afspraak in de kalender.
+
+
+    Vereist: de ESPHome-config esphome/ink-kalender.yaml (apparaatnaam
+    'ink-kalender') en een AI-integratie met een AI-taak-entiteit.
+  domain: automation
+  source_url: https://github.com/joenivl/Ink/blob/main/homeassistant/blueprints/ink_kalender.yaml
+  input:
+    kalenders:
+      name: Kalenders op het scherm
+      description: Alle kalenders die op het scherm moeten komen.
+      selector:
+        entity:
+          filter:
+            - domain: calendar
+          multiple: true
+    doel_kalender:
+      name: Kalender voor nieuwe afspraken
+      description: Hier komen ingesproken afspraken in.
+      selector:
+        entity:
+          filter:
+            - domain: calendar
+    notitielijsten:
+      name: Takenlijsten voor 'Notities'
+      description: Open taken uit deze lijsten komen onder 'Notities'. Mag leeg.
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: todo
+          multiple: true
+    ai_taak:
+      name: AI-taak
+      description: >
+        Zet de ingesproken tekst om in titel, datum en tijd. Bijvoorbeeld van
+        de integratie OpenAI, Google Gemini, Anthropic of Ollama (lokaal).
+      selector:
+        entity:
+          filter:
+            - domain: ai_task
+    kalendernaam_tonen:
+      name: Kalendernaam voor de titel zetten
+      description: 'Handig met een kalender per gezinslid, bijv. "Sanne: Pilates".'
+      default: false
+      selector:
+        boolean:
+    standaard_duur:
+      name: Standaardduur zonder eindtijd
+      default: 60
+      selector:
+        number:
+          min: 15
+          max: 480
+          step: 15
+          unit_of_measurement: min
+
+mode: queued
+max: 10
+
+triggers:
+  - trigger: time_pattern
+    minutes: /5
+    id: verstuur
+  - trigger: homeassistant
+    event: start
+    id: verstuur
+  - trigger: event
+    event_type: esphome.ink_klaar
+    id: verstuur
+  - trigger: state
+    entity_id: !input kalenders
+    id: verstuur
+  - trigger: event
+    event_type: esphome.ink_spraak
+    id: spraak
+  - trigger: event
+    event_type: esphome.ink_opslaan
+    id: opslaan
+
+variables:
+  kalenders: !input kalenders
+  doel_kalender: !input doel_kalender
+  notitielijsten: !input notitielijsten
+  ai_taak: !input ai_taak
+  kalendernaam_tonen: !input kalendernaam_tonen
+  standaard_duur: !input standaard_duur
+  dagen: [maandag, dinsdag, woensdag, donderdag, vrijdag, zaterdag, zondag]
+
+actions:
+  # ------------------------------------------------ ingesproken zin -> voorstel
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id == 'spraak' }}"
+    then:
+      - variables:
+          tekst: "{{ trigger.event.data.tekst | default('') | trim }}"
+      - action: ai_task.generate_data
+        continue_on_error: true
+        data:
+          task_name: Ink afspraak
+          entity_id: "{{ ai_taak }}"
+          instructions: |-
+            Zet een ingesproken Nederlandse zin om in een afspraak voor de gezinskalender.
+            Het is nu {{ dagen[now().weekday()] }} {{ now().strftime('%Y-%m-%d %H:%M') }}.
+            De komende dagen:
+            {%- for i in range(15) %}
+            {%- set d = now() + timedelta(days=i) %}
+            - {{ dagen[d.weekday()] }} {{ d.strftime('%Y-%m-%d') }}{{ ' (vandaag)' if i == 0 else ' (morgen)' if i == 1 else '' }}
+            {%- endfor %}
+
+            Regels:
+            - Een losse weekdag ("zaterdag") is de eerstvolgende; vandaag telt alleen als die tijd nog niet voorbij is.
+            - "Volgende week <dag>" is die dag in de volgende kalenderweek (weken beginnen op maandag).
+            - Tijden in 24-uursnotatie UU:MM. Kies bij "half drie" of "om acht" de logische tijd van de dag.
+            - Geen tijd genoemd: begintijd en eindtijd leeg laten (hele dag).
+            - Geen eindtijd genoemd: eindtijd leeg laten.
+            - Titel: kort, met hoofdletter, zonder datum en tijd. Namen met hoofdletter.
+            - Gaat de zin niet over iets dat in de agenda moet, zet is_afspraak dan op false.
+
+            Zin: "{{ tekst }}"
+          structure:
+            is_afspraak:
+              description: Is dit een afspraak voor de agenda?
+              required: true
+              selector:
+                boolean:
+            titel:
+              description: Korte titel van de afspraak
+              required: true
+              selector:
+                text:
+            datum:
+              description: Datum als JJJJ-MM-DD
+              required: true
+              selector:
+                text:
+            begintijd:
+              description: Begintijd als UU:MM, leeg voor de hele dag
+              selector:
+                text:
+            eindtijd:
+              description: Eindtijd als UU:MM, leeg als niet genoemd
+              selector:
+                text:
+        response_variable: ai
+      - variables:
+          a: "{{ ai.data if ai is defined and ai.data is mapping else {} }}"
+          datum: "{{ a.datum | default('') | string | trim }}"
+          datum_geldig: >-
+            {{ datum is match('^\d{4}-\d{2}-\d{2}$')
+               and strptime(datum, '%Y-%m-%d', none) is not none }}
+          begin: >-
+            {% set t = a.begintijd | default('') | string | trim %}
+            {% if t is match('^\d{1,2}[:.]\d{2}$') %}
+              {% set p = t.replace('.', ':').split(':') %}
+              {{ '%02d:%02d' | format(p[0] | int, p[1] | int) }}
+            {% endif %}
+          eind: >-
+            {% set t = a.eindtijd | default('') | string | trim %}
+            {% if begin | trim == '' %}
+            {% elif t is match('^\d{1,2}[:.]\d{2}$') %}
+              {% set p = t.replace('.', ':').split(':') %}
+              {{ '%02d:%02d' | format(p[0] | int, p[1] | int) }}
+            {% else %}
+              {{ (strptime(datum ~ ' ' ~ (begin | trim), '%Y-%m-%d %H:%M')
+                  + timedelta(minutes=standaard_duur | int)).strftime('%H:%M') }}
+            {% endif %}
+      - if:
+          - condition: template
+            value_template: "{{ ai is not defined }}"
+        then:
+          - action: esphome.ink_kalender_toon_melding
+            continue_on_error: true
+            data:
+              tekst: De AI-taak werkte niet. Kijk in Home Assistant bij Instellingen > Systeem > Logboeken.
+        else:
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ a.is_afspraak | default(false) | bool(false)
+                     and datum_geldig and (a.titel | default('') | trim) != '' }}
+            then:
+              - action: esphome.ink_kalender_toon_voorstel
+                continue_on_error: true
+                data:
+                  titel: "{{ a.titel | trim }}"
+                  datum: "{{ datum }}"
+                  begin: "{{ begin | trim }}"
+                  eind: "{{ eind | trim }}"
+                  gehoord: "{{ tekst }}"
+            else:
+              - action: esphome.ink_kalender_toon_melding
+                continue_on_error: true
+                data:
+                  tekst: Ik hoorde "{{ tekst }}", maar kon daar geen afspraak van maken.
+      - stop: Spraak verwerkt
+
+  # ------------------------------------------------ bevestigd -> kalender in
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id == 'opslaan' }}"
+    then:
+      - variables:
+          d: "{{ trigger.event.data }}"
+      - if:
+          - condition: template
+            value_template: "{{ (d.begin | default('')) == '' }}"
+        then:
+          - action: calendar.create_event
+            target:
+              entity_id: "{{ doel_kalender }}"
+            data:
+              summary: "{{ d.titel }}"
+              start_date: "{{ d.datum }}"
+              end_date: "{{ (strptime(d.datum, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d') }}"
+        else:
+          - action: calendar.create_event
+            target:
+              entity_id: "{{ doel_kalender }}"
+            data:
+              summary: "{{ d.titel }}"
+              start_date_time: "{{ d.datum }} {{ d.begin }}:00"
+              end_date_time: >-
+                {% set s = strptime(d.datum ~ ' ' ~ d.begin, '%Y-%m-%d %H:%M') %}
+                {% if (d.eind | default('')) != '' %}
+                  {% set e = strptime(d.datum ~ ' ' ~ d.eind, '%Y-%m-%d %H:%M') %}
+                  {% if e <= s %}{% set e = e + timedelta(days=1) %}{% endif %}
+                {% else %}
+                  {% set e = s + timedelta(minutes=standaard_duur | int) %}
+                {% endif %}
+                {{ e.strftime('%Y-%m-%d %H:%M:%S') }}
+
+  # ------------------------------------------------ agenda naar het scherm
+  # Het scherm ververst alleen als er echt iets veranderd is.
+  - variables:
+      grid_start: >-
+        {% set eerste = today_at().replace(day=1) %}
+        {{ (eerste - timedelta(days=eerste.weekday())).strftime('%Y-%m-%d') }}
+  - action: calendar.get_events
+    target:
+      entity_id: "{{ kalenders }}"
+    data:
+      start_date_time: "{{ grid_start }} 00:00:00"
+      end_date_time: "{{ (strptime(grid_start, '%Y-%m-%d') + timedelta(days=42)).strftime('%Y-%m-%d') }} 00:00:00"
+    response_variable: agenda
+  - variables:
+      # Per regel "JJJJ-MM-DD|UU:MM|titel"; hele-dag-afspraken krijgen '-' als
+      # tijd (en staan zo na sorteren vooraan) en komen op elke dag die ze duren.
+      afspraken_tekst: >-
+        {%- set ns = namespace(r=[]) -%}
+        {%- for kal, data in agenda.items() -%}
+          {%- set naam = state_attr(kal, 'friendly_name') or kal -%}
+          {%- for e in data.events -%}
+            {%- set titel = (e.summary | default('') | replace('\n', ' ') | trim) -%}
+            {%- if kalendernaam_tonen -%}{%- set titel = naam ~ ': ' ~ titel -%}{%- endif -%}
+            {%- if 'T' in e.start -%}
+              {%- set s = as_local(as_datetime(e.start)) -%}
+              {%- set ns.r = ns.r + [s.strftime('%Y-%m-%d') ~ '|' ~ s.strftime('%H:%M') ~ '|' ~ titel] -%}
+            {%- else -%}
+              {%- set s = strptime(e.start, '%Y-%m-%d') -%}
+              {%- set n = [(strptime(e.end, '%Y-%m-%d') - s).days, 1] | max -%}
+              {%- for i in range(n) -%}
+                {%- set ns.r = ns.r + [(s + timedelta(days=i)).strftime('%Y-%m-%d') ~ '|-|' ~ titel] -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {{- ns.r | sort | join('\n') -}}
+  - if:
+      - condition: template
+        value_template: "{{ notitielijsten | count > 0 }}"
+    then:
+      - action: todo.get_items
+        target:
+          entity_id: "{{ notitielijsten }}"
+        data:
+          status: needs_action
+        response_variable: taken
+      - action: esphome.ink_kalender_toon_agenda
+        continue_on_error: true
+        data:
+          afspraken: "{{ afspraken_tekst }}"
+          notities: >-
+            {%- set ns = namespace(r=[]) -%}
+            {%- for lijst, data in taken.items() -%}
+              {%- for t in data['items'] -%}
+                {%- set ns.r = ns.r + [t.summary | replace('\n', ' ') | trim] -%}
+              {%- endfor -%}
+            {%- endfor -%}
+            {{- ns.r | join('\n') -}}
+    else:
+      - action: esphome.ink_kalender_toon_agenda
+        continue_on_error: true
+        data:
+          afspraken: "{{ afspraken_tekst }}"
+          notities: ""

@@ -1,0 +1,5 @@
+esphome/secrets.yaml
+esphome/.esphome/
+tools/preview/build/
+tools/preview/fonts/
+__pycache__/
