@@ -47,7 +47,7 @@ constexpr int TAB_X = 760;
 // Weekscherm: week over de volle breedte, notities eronder
 constexpr int WEEK_Y = 110;
 constexpr int WEEK_KOL = BREED / 7;
-constexpr int WEEK_KOP_H = 58;
+constexpr int WEEK_KOP_H = 76;
 constexpr int WEEK_EIND = 944;
 constexpr int NOTITIE_Y = 958;
 constexpr int NOTITIE_EIND = 1240;
@@ -446,11 +446,6 @@ inline int week_afspraak(Display &it, const Fonts &f, const Afspraak &a, int x, 
 
 inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
   const Datum maandag = plus_dagen(s.vandaag, -weekdag(s.vandaag));
-  // Volledige dagnamen als ze allemaal passen naast de datum, anders "Ma", "Di", ...
-  bool lange_namen = true;
-  for (int i = 0; i < 7; i++)
-    if (breedte(it, f.kop, DAG_LANG[i]) + breedte(it, f.normaal, "30 sep") > WEEK_KOL - 10 - 14 - 36)
-      lange_namen = false;
   for (int i = 0; i < 7; i++) {
     const Datum dag = plus_dagen(maandag, i);
     const bool is_vandaag = s.tijd_geldig && dag == s.vandaag;
@@ -460,11 +455,11 @@ inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
     const Color kop_achter = is_vandaag ? ZWART : GRIJS_LICHT;
     const Color kop_tekst = is_vandaag ? WIT : ZWART;
     it.filled_rectangle(x, WEEK_Y, w, WEEK_KOP_H, kop_achter);
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%d %s", dag.d, MAAND_KORT[dag.m - 1]);
-    tekst(it, x + w - 12, WEEK_Y + 9, f.normaal, kop_tekst, kop_achter, TextAlign::TOP_RIGHT, buf);
-    tekst(it, x + 14, WEEK_Y + 2, f.kop, kop_tekst, kop_achter, TextAlign::TOP_LEFT,
-          lange_namen ? DAG_LANG[i] : DAG_KORT[i]);
+    // Dagnaam groot, datum klein eronder
+    tekst(it, x + 14, WEEK_Y - 2, f.kop, kop_tekst, kop_achter, TextAlign::TOP_LEFT, DAG_LANG[i]);
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "%d %s", dag.d, MAAND[dag.m - 1]);
+    tekst(it, x + 14, WEEK_Y + 40, f.klein, kop_tekst, kop_achter, TextAlign::TOP_LEFT, buf);
 
     if (i > 0)
       it.vertical_line(x - 5, WEEK_Y + WEEK_KOP_H + 8, WEEK_EIND - WEEK_Y - WEEK_KOP_H - 8, GRIJS);

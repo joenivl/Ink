@@ -572,31 +572,31 @@ script:
 font:
   - file: gfonts://${lettertype}@400
     id: f_klein
-    size: 24
+    size: 22
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
   - file: gfonts://${lettertype}@400
     id: f_normaal
-    size: 28
+    size: 26
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_vet
-    size: 28
+    size: 26
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_kop
-    size: 36
+    size: 34
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_groot
-    size: 56
+    size: 52
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
