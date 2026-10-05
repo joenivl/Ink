@@ -15,6 +15,7 @@
 #include "esphome.h"
 #endif
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -279,7 +280,11 @@ struct Staat {
   HaKnop knoppen[4];
   float temperatuur{NAN};
   float vochtigheid{NAN};
+  float accu{NAN};  // procent
 };
+
+// Onder dit percentage waarschuwt het scherm om op te laden.
+constexpr int ACCU_LAAG = 15;
 
 inline Staat &staat() {
   static Staat s;
@@ -405,8 +410,18 @@ inline void kader(Display &it, int x, int y, int w, int h, int dikte, Color kleu
 inline int tab_x(int i) { return TAB_X + i * TAB_B; }
 
 inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
-  tekst(it, MARGE, 4, f.groot, ZWART, WIT, TextAlign::TOP_LEFT,
-        s.tijd_geldig ? datum_lang(s.vandaag) : std::string("Ink kalender"));
+  // Met een waarschuwing ernaast de korte datum, anders past het niet
+  const bool waarschuwing_zichtbaar = !s.verbonden || !s.data_ontvangen;
+  std::string datum = "Ink kalender";
+  if (s.tijd_geldig && waarschuwing_zichtbaar) {
+    char kort[24];
+    std::snprintf(kort, sizeof(kort), "%s %d %s", DAG_KORT[weekdag(s.vandaag)], s.vandaag.d,
+                  MAAND_KORT[s.vandaag.m - 1]);
+    datum = kort;
+  } else if (s.tijd_geldig) {
+    datum = datum_lang(s.vandaag);
+  }
+  tekst(it, MARGE, 4, f.groot, ZWART, WIT, TextAlign::TOP_LEFT, datum);
 
   // Tabs
   static const char *const TABS[] = {"Week", "Maand"};
@@ -418,11 +433,28 @@ inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
     tekst(it, tab_x(i) + TAB_B / 2, TAB_Y + 4, f.kop, actief ? WIT : ZWART, a, TextAlign::TOP_CENTER, TABS[i]);
   }
 
+  // Rechts, van rechts naar links: accu, temperatuur, weeknummer
   char buf[48];
-  std::string rechts;
-  if (s.tijd_geldig) {
-    std::snprintf(buf, sizeof(buf), "Week %d", iso_week(s.vandaag));
-    rechts = buf;
+  int xr = B - MARGE;
+  if (!std::isnan(s.accu)) {
+    const int pct = static_cast<int>(std::lround(s.accu));
+    const bool laag = pct <= ACCU_LAAG;
+    std::snprintf(buf, sizeof(buf), "%d%%", pct);
+    tekst(it, xr, 28, laag ? f.vet : f.normaal, laag ? ZWART : GRIJS_DONKER, WIT, TextAlign::TOP_RIGHT, buf);
+    xr -= breedte(it, laag ? f.vet : f.normaal, buf) + 10;
+    // Accu-icoontje: 46x24 met knopje rechts, vulling naar verhouding
+    const int ix = xr - 52, iy = 36;
+    const Color rand = laag ? ZWART : GRIJS_DONKER;
+    kader(it, ix, iy, 46, 24, 2, rand);
+    it.filled_rectangle(ix + 46, iy + 7, 4, 10, rand);
+    const int vul = std::max(0, std::min(40, pct * 40 / 100));
+    if (vul > 0)
+      it.filled_rectangle(ix + 3, iy + 3, vul, 18, rand);
+    xr = ix - 36;
+    if (laag) {
+      tekst(it, xr, 28, f.vet, ZWART, WIT, TextAlign::TOP_RIGHT, "opladen!");
+      xr -= breedte(it, f.vet, "opladen!") + 36;
+    }
   }
   if (!std::isnan(s.temperatuur)) {
     if (!std::isnan(s.vochtigheid))
@@ -433,17 +465,19 @@ inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
     for (auto &c : t)
       if (c == '.')
         c = ',';
-    tekst(it, B - MARGE, 28, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_RIGHT, t);
-    const int tb = breedte(it, f.normaal, t);
-    if (!rechts.empty())
-      tekst(it, B - MARGE - tb - 40, 20, f.kop, ZWART, WIT, TextAlign::TOP_RIGHT, rechts);
-  } else if (!rechts.empty()) {
-    tekst(it, B - MARGE, 20, f.kop, ZWART, WIT, TextAlign::TOP_RIGHT, rechts);
+    tekst(it, xr, 28, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_RIGHT, t);
+    xr -= breedte(it, f.normaal, t) + 36;
   }
-  if (!s.verbonden || !s.data_ontvangen) {
+  if (s.tijd_geldig) {
+    std::snprintf(buf, sizeof(buf), "Week %d", iso_week(s.vandaag));
+    // Alleen als het naast de tabs past
+    if (xr - breedte(it, f.kop, buf) > tab_x(2) + 20)
+      tekst(it, xr, 20, f.kop, ZWART, WIT, TextAlign::TOP_RIGHT, buf);
+  }
+  if (waarschuwing_zichtbaar) {
     const std::string waarschuwing = !s.verbonden ? "Geen verbinding" : "Wacht op agenda…";
     const int w = breedte(it, f.vet, waarschuwing) + 28;
-    const int x = tab_x(2) + 30;
+    const int x = TAB_X - w - 20;
     it.filled_rectangle(x, TAB_Y + 4, w, TAB_H - 8, ZWART);
     tekst(it, x + 14, TAB_Y + 10, f.vet, WIT, ZWART, TextAlign::TOP_LEFT, waarschuwing);
   }

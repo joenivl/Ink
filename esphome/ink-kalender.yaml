@@ -50,6 +50,7 @@ esphome:
     - priority: 600
       then:
         - output.turn_on: mic_stroom
+        - output.turn_on: accu_meten
         - pcf8563.read_time: rtc_tijd
         - lambda: |-
             auto &s = ink::staat();
@@ -197,6 +198,65 @@ interval:
       - script.execute: ververs
 
 sensor:
+  # Accu: spanning via een deler (x2) op GPIO1, percentage volgens de
+  # ontlaadcurve van Seeed. Met USB eraan staat hij rond de 100%.
+  - platform: adc
+    id: accuspanning
+    name: Accuspanning
+    pin: GPIO1
+    attenuation: 12db
+    update_interval: 60s
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    filters:
+      - multiply: 2.0
+      - median:
+          window_size: 5
+          send_every: 5
+          send_first_at: 1
+  - platform: template
+    id: accu
+    name: Accu
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 5min
+    lambda: |-
+      if (std::isnan(id(accuspanning).state))
+        return {};  // nog geen meting
+      return id(accuspanning).state;
+    filters:
+      - calibrate_linear:
+          method: exact
+          datapoints:
+            - 3.27 -> 0.0
+            - 3.30 -> 5.0
+            - 3.41 -> 10.0
+            - 3.49 -> 20.0
+            - 3.58 -> 30.0
+            - 3.68 -> 40.0
+            - 3.75 -> 50.0
+            - 3.80 -> 60.0
+            - 3.85 -> 70.0
+            - 3.91 -> 80.0
+            - 3.96 -> 90.0
+            - 4.15 -> 100.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+      - round: 0
+    on_value:
+      # Het scherm alleen volledig verversen als het percentage een stap van
+      # 10% maakt of onder de 'opladen!'-grens zakt; anders knippert het te vaak.
+      - lambda: |-
+          auto &s = ink::staat();
+          auto emmer = [](float p) { return p <= ink::ACCU_LAAG ? -1 : static_cast<int>(p) / 10; };
+          const bool anders = std::isnan(s.accu) || emmer(s.accu) != emmer(x);
+          s.accu = x;
+          if (anders)
+            ink::ververs_mask() |= ink::VOL;
+      - script.execute: ververs
   - platform: sht4x
     temperature:
       id: temperatuur
@@ -252,6 +312,10 @@ output:
   - platform: gpio
     id: mic_stroom
     pin: GPIO38
+  # Zet de spanningsdeler voor de accumeting aan (E1003: GPIO40)
+  - platform: gpio
+    id: accu_meten
+    pin: GPIO40
   - platform: ledc
     id: zoemer
     pin: GPIO45

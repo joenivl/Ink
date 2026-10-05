@@ -30,7 +30,7 @@ FONT_DEFS = [  # (naam, gewicht, grootte)
     ("kop", 700, 34),
     ("groot", 700, 52),
 ]
-SCENARIOS = ["week", "maand", "luisteren", "voorstel", "notitie", "melding"]
+SCENARIOS = ["week", "maand", "luisteren", "voorstel", "notitie", "melding", "accu-laag"]
 TEKENS = list(range(32, 0x250)) + [0x2013, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026]
 
 

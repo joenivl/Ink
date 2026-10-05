@@ -154,6 +154,43 @@ draait (Instellingen → Automatiseringen → *Ink kalender* → Traces).
 
 **"Geen verbinding" bovenaan.** Het scherm heeft vijf minuten geen contact met HA gehad.
 
+## Accu
+
+In Home Assistant komen twee sensoren bij het apparaat: **Accu** (%) en
+**Accuspanning** (V, onder *Diagnose*). Op het scherm staat rechtsboven een
+accu-icoontje met het percentage. Onder de 15% wordt dat vet, met "opladen!" ervoor.
+
+- Het percentage komt uit de ontlaadcurve van Seeed (3,27 V = 0%, 4,15 V = 100%).
+- Het scherm ververst alleen bij een stap van 10%, zodat het niet steeds knippert.
+- Of de USB-kabel erin zit, kan de software niet zien; dat geeft alleen het rode
+  lampje aan. Met USB eraan staat de accu rond de 100%.
+
+### Hoe lang gaat de accu mee?
+
+Het ligt helemaal aan of het apparaat aan blijft of slaapt:
+
+| Situatie | Stroom | Accuduur (3000 mAh) |
+|---|---|---|
+| **Ink zoals gebouwd**: altijd aan (wifi, touch, knoppen, inspreken) | ~185 mA | **ca. 12–16 uur** |
+| ESPHome met deep sleep, elke 4 uur verversen (standaard) | 4–5 mA in slaap | 20–30 dagen |
+| Idem, met geoptimaliseerde slaapstand | < 0,1 mA in slaap | 3–6 maanden |
+| Seeed-opgave: 1× per dag verversen | – | tot 6 maanden |
+
+De stroomwaarden zijn metingen van het community-project
+[ar0v3r/reTerminal-E1003-ESPHome](https://github.com/ar0v3r/reTerminal-E1003-ESPHome)
+op dezelfde hardware. Je kunt het zelf controleren door de USB-kabel eruit te halen
+en de geschiedenis van de sensor *Accu* in HA te bekijken.
+
+**Conclusie: laat het scherm aan de USB-C-voeding hangen.** De accu werkt dan als
+noodstroom bij een stroomstoring, of als je het scherm even van de koelkast pakt.
+Het dagelijkse verversen zelf kost bijna niets; het is de wifi en het
+"wakker blijven" voor touch en inspreken.
+
+Een **spaarstand** zou kunnen: diep slapen, wakker worden door een tik of knop en
+elk half uur verversen. Dat haalt naar schatting 2–4 weken. De prijs is dat het
+scherm na een tik 5–10 seconden nodig heeft om wakker te worden en verbinding
+te maken voordat je kunt inspreken. Die stand is niet gebouwd.
+
 ## Waarom C++?
 
 De E1003 heeft geen Linux of terminal: er zit een ESP32-S3-microcontroller in. Het

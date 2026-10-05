@@ -1,5 +1,5 @@
 // Previews van het scherm met voorbeelddata.
-// Gebruik: preview <week|maand|luisteren|voorstel|notitie|melding>  > opdrachten.jsonl
+// Gebruik: preview <week|maand|luisteren|voorstel|notitie|accu-laag|melding>  > opdrachten.jsonl
 #include <cstring>
 
 #include "../../esphome/ink_kalender.h"
@@ -46,6 +46,7 @@ int main(int argc, char **argv) {
   s.data_ontvangen = true;
   s.temperatuur = 21.3f;
   s.vochtigheid = 54.0f;
+  s.accu = 87.0f;
   s.afspraken = ink::lees_afspraken(VOORBEELD);
   s.notities = ink::lees_notities(
       "todo.notities|a1|Cadeautje Faye\n"
@@ -70,6 +71,9 @@ int main(int argc, char **argv) {
   } else if (!std::strcmp(scenario, "notitie")) {
     s.status = ink::VOORSTEL;
     s.voorstel = {"Cadeautje voor Faye kopen", "", "", "", "notitie cadeautje voor faye kopen", "notitie"};
+  } else if (!std::strcmp(scenario, "accu-laag")) {
+    s.accu = 12.0f;
+    s.verbonden = false;
   } else if (!std::strcmp(scenario, "melding")) {
     s.status = ink::MELDING;
     s.melding = "Ik hoorde \"doe de lampen uit\", maar dat is geen afspraak.";
