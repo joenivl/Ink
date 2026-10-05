@@ -10,17 +10,20 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
     naar de week.
 - **Handschrift-look**: lettertype Kalam.
 - **Knoppen**: vier knoppen om lampen, scripts en dergelijke in HA aan of uit te zetten.
-- **Afspraak inspreken** (alleen via de knop, geen wake word): tik op de knop en zeg bijvoorbeeld "zaterdag half drie
-  verjaardag oma". Het scherm laat zien wat het begrepen heeft; pas na
-  **Opslaan** komt de afspraak in de kalender.
+- **Inspreken** (alleen via de knop, geen wake word): tik op de knop en zeg bijvoorbeeld
+  "zaterdag half drie verjaardag oma" (afspraak) of "notitie cadeautje voor Faye" (notitie).
+  Het scherm laat zien wat het begrepen heeft; pas na **Opslaan** komt het in de kalender
+  of op de takenlijst.
+- **Notities afvinken**: tik op een notitie; die wordt meteen doorgestreept en in HA
+  afgevinkt. Per ongeluk? In de HA-app staat hij onder "Voltooid" en kun je hem terugzetten.
 
 | Week | Maand |
 |---|---|
 | ![](docs/preview-week.png) | ![](docs/preview-maand.png) |
 
-| Inspreken | Voorstel | Melding |
-|---|---|---|
-| ![](docs/preview-luisteren.png) | ![](docs/preview-voorstel.png) | ![](docs/preview-melding.png) |
+| Inspreken | Afspraak | Notitie | Melding |
+|---|---|---|---|
+| ![](docs/preview-luisteren.png) | ![](docs/preview-voorstel.png) | ![](docs/preview-notitie.png) | ![](docs/preview-melding.png) |
 
 *De previews worden gemaakt door de echte tekencode (`esphome/ink_kalender.h`),
 zie [Preview en tests](#preview-en-tests).*
@@ -63,8 +66,11 @@ Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7
 1. **Kalender**: je hebt al een Local Calendar. Wil je per gezinslid de naam
    zien? Maak dan meerdere Local Calendars aan en zet in de blueprint
    "Kalendernaam voor de titel zetten" aan.
-2. **Notities** (optioneel): Instellingen → Apparaten en diensten → *Local To-do*,
-   bijvoorbeeld een lijst "Notities".
+2. **Notities**: Instellingen → Apparaten en diensten → *Local To-do*, bijvoorbeeld
+   een lijst "Notities". Notities toevoegen kan daarna via het scherm (inspreken),
+   via de HA-app (*Takenlijsten*) of via een spraakassistent in HA ("zet melk op
+   notities"). Ingesproken notities komen in de eerste lijst die je in de
+   blueprint kiest.
 3. **AI-taak**: voeg de integratie **OpenAI** toe (API-sleutel van
    platform.openai.com; bij dit gebruik een paar cent per maand). Kies in de
    integratie een *AI-taak* met model `gpt-4o-mini` of nieuwer en controleer dat
@@ -104,11 +110,10 @@ Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7
 
 ### 4. Blueprint
 
-- Is deze repo publiek? Ga dan naar Instellingen → Automatiseringen → Blueprints →
-  *Blueprint importeren* en plak:
-  `https://github.com/joenivl/Ink/blob/main/homeassistant/blueprints/ink_kalender.yaml`
-- Is de repo privé? Kopieer het bestand dan naar
-  `/config/blueprints/automation/ink/ink_kalender.yaml` en herlaad de automatiseringen.
+De repo is privé, dus zet je het bestand met de hand in HA: maak met de
+*File editor*-add-on `/config/blueprints/automation/ink/ink_kalender.yaml` aan, plak
+de inhoud van `homeassistant/blueprints/ink_kalender.yaml` en kies bij
+Automatiseringen → Blueprints *Blueprints opnieuw laden* (of herstart HA).
 
 Maak daarna een automatisering van de blueprint. Je kiest daarin de kalenders,
 de kalender voor nieuwe afspraken, eventuele takenlijsten en de AI-taak.
@@ -118,8 +123,9 @@ de kalender voor nieuwe afspraken, eventuele takenlijsten en de AI-taak.
 | | |
 |---|---|
 | **Week / Maand** (tabs bovenin) | Wisselen van scherm |
-| **Afspraak inspreken** (of de groene knop) | Tik, spreek, wacht. Tik nog een keer om te stoppen. |
+| **Inspreken** (of de groene knop) | Tik, spreek, wacht. Tik nog een keer om te stoppen. |
 | **Opslaan / Annuleer** | Na het inspreken. Zonder keuze sluit het venster na 3 minuten. |
+| **Notitie aantikken** | Afvinken |
 | **HA-knoppen** | Zetten de entiteit aan of uit; zwart betekent aan. |
 | Rechter witte knop | Scherm volledig verversen |
 | Linker witte knop | Wisselen tussen week en maand |
