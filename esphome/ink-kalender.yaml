@@ -1,4 +1,4 @@
-# Ink – gezinskalender op de Seeed reTerminal E1003 (10,3" e-paper, staand)
+# Ink – gezinskalender op de Seeed reTerminal E1003 (10,3" e-paper, liggend)
 #
 # - toont week, maand en notities uit Home Assistant
 # - knoppen om Home Assistant te bedienen
@@ -12,12 +12,14 @@ substitutions:
   vriendelijke_naam: Ink kalender
   tijdzone: Europe/Amsterdam
 
-  # Staand ophangen. Staat het beeld op z'n kop? Zet rotatie op 270 en
-  # wissel touch_mirror_x/touch_mirror_y om (zie README, "Touch klopt niet").
-  rotatie: "90"
-  touch_swap_xy: "true"
+  # Liggend, knoppen van de behuizing boven. Hangt hij andersom? Zet rotatie
+  # op 180 en beide touch_mirror's op "true" (zie README, "Touch klopt niet").
+  rotatie: "0"
   touch_mirror_x: "false"
-  touch_mirror_y: "true"
+  touch_mirror_y: "false"
+
+  # Lettertype (Google Fonts). Handschrift: Kalam. Strakker: Roboto.
+  lettertype: Kalam
 
   # Knoppen onderaan. Werkt met alles wat homeassistant.toggle snapt
   # (lampen, schakelaars, scripts, groepen). Naam leeg = knop verbergen.
@@ -342,7 +344,6 @@ touchscreen:
     interrupt_pin: GPIO2
     reset_pin: GPIO48
     transform:
-      swap_xy: ${touch_swap_xy}
       mirror_x: ${touch_mirror_x}
       mirror_y: ${touch_mirror_y}
     on_touch:
@@ -524,33 +525,33 @@ script:
                 status: !lambda return ink::RUST;
 
 font:
-  - file: gfonts://Roboto
+  - file: gfonts://${lettertype}@400
     id: f_klein
-    size: 20
+    size: 22
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-  - file: gfonts://Roboto
+  - file: gfonts://${lettertype}@400
     id: f_normaal
-    size: 24
+    size: 26
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-  - file: gfonts://Roboto@700
+  - file: gfonts://${lettertype}@700
     id: f_vet
-    size: 24
+    size: 26
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-  - file: gfonts://Roboto@700
+  - file: gfonts://${lettertype}@700
     id: f_kop
-    size: 30
+    size: 34
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-  - file: gfonts://Roboto@700
+  - file: gfonts://${lettertype}@700
     id: f_groot
-    size: 46
+    size: 52
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true

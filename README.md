@@ -1,12 +1,13 @@
 # Ink – gezinskalender op de reTerminal E1003
 
 Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
-(10,3" e-paper, staand opgehangen), gekoppeld aan Home Assistant:
+(10,3" e-paper, liggend), gekoppeld aan Home Assistant:
 
-- **Week en maand**: bovenaan de week, daaronder de maand, net als op het whiteboard.
-- **Notities**: open taken uit een HA-takenlijst.
+- **Week en maand**: bovenaan de week, daaronder links de maand, net als op het whiteboard.
+- **Notities**: rechts, open taken uit een HA-takenlijst.
+- **Handschrift-look**: lettertype Kalam, een soort whiteboardstift.
 - **Knoppen**: vier knoppen om lampen, scripts en dergelijke in HA aan of uit te zetten.
-- **Afspraak inspreken**: tik op de knop en zeg bijvoorbeeld "zaterdag half drie
+- **Afspraak inspreken** (alleen via de knop, geen wake word): tik op de knop en zeg bijvoorbeeld "zaterdag half drie
   verjaardag oma". Het scherm laat zien wat het begrepen heeft; pas na
   **Opslaan** komt de afspraak in de kalender.
 
@@ -40,10 +41,13 @@ zie [Preview en tests](#preview-en-tests).*
 
 ## Bestanden
 
+Alles op het scherm is één scherm in verschillende toestanden: normaal, aan het
+luisteren, een voorstel ter bevestiging en een melding.
+
 | Pad | Wat |
 |---|---|
 | `esphome/ink-kalender.yaml` | ESPHome-config voor het scherm |
-| `esphome/ink_kalender.h` | Layout, kalenderlogica en touchvlakken (C++) |
+| `esphome/ink_kalender.h` | Layout, kalenderlogica en touchvlakken (C++, zie hieronder) |
 | `esphome/secrets.example.yaml` | Voorbeeld voor `secrets.yaml` |
 | `homeassistant/blueprints/ink_kalender.yaml` | Blueprint: agenda naar het scherm, spraak naar afspraak |
 | `tools/preview/` | Tests en PNG-previews zonder hardware |
@@ -78,7 +82,8 @@ Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7
 2. Zet `ink-kalender.yaml` en `ink_kalender.h` samen in `/config/esphome/`. Dat kan
    via de *File editor*- of *Studio Code Server*-add-on.
 3. Pas bovenin `ink-kalender.yaml` de `substitutions` aan: de vier knoppen
-   (`knopN_naam` en `knopN_entiteit`). Een lege naam verbergt de knop.
+   (`knopN_naam` en `knopN_entiteit`; een lege naam verbergt de knop) en eventueel
+   `lettertype` (elk Google Font, bijv. `Patrick Hand` of `Roboto`).
 4. Installeer. De eerste keer moet dat via USB-C vanaf een computer (Chrome of Edge):
    *Install → Manual download*, daarna flashen via <https://web.esphome.io>.
    Daarna gaan updates draadloos.
@@ -115,10 +120,10 @@ de kalender voor nieuwe afspraken, eventuele takenlijsten en de AI-taak.
 ## Problemen oplossen
 
 **Touch klopt niet (je tikt op de ene knop en een andere reageert).**
-De draairichting van de touchlaag ten opzichte van het scherm heb ik afgeleid uit
-het voorbeeldproject van Seeed. Op echte hardware is dat nog niet gecontroleerd.
+De richting van de touchlaag ten opzichte van het scherm heb ik afgeleid uit het
+voorbeeldproject van Seeed. Op echte hardware is dat nog niet gecontroleerd.
 Bekijk de logs (ESPHome → *Logs*): bij elke tik staat er `Aanraking op x=…, y=…`.
-Linksboven hoort ongeveer (0, 0) te geven en rechtsonder ongeveer (1404, 1872).
+Linksboven hoort ongeveer (0, 0) te geven en rechtsonder ongeveer (1872, 1404).
 
 | Situatie | `touch_mirror_x` | `touch_mirror_y` |
 |---|---|---|
@@ -126,8 +131,8 @@ Linksboven hoort ongeveer (0, 0) te geven en rechtsonder ongeveer (1404, 1872).
 | y klopt, x is omgekeerd | omdraaien | ongewijzigd |
 | Beide omgekeerd | omdraaien | omdraaien |
 
-Hangt het scherm andersom (beeld op z'n kop)? Zet `rotatie: "270"`, `touch_mirror_x: "true"`
-en `touch_mirror_y: "false"`.
+Hangt het scherm andersom (beeld op z'n kop)? Zet `rotatie: "180"` en beide
+`touch_mirror`'s op `"true"`.
 
 **Inspreken doet niets.** Controleer stap 3.2 en 3.3 en kijk of de automatisering
 draait (Instellingen → Automatiseringen → *Ink kalender* → Traces).
@@ -135,6 +140,22 @@ draait (Instellingen → Automatiseringen → *Ink kalender* → Traces).
 **Microfoon te zacht.** Voeg onder `voice_assistant:` bijvoorbeeld `volume_multiplier: 3.0` toe.
 
 **"Geen verbinding" bovenaan.** Het scherm heeft vijf minuten geen contact met HA gehad.
+
+## Waarom C++?
+
+De E1003 heeft geen Linux of terminal: er zit een ESP32-S3-microcontroller in. Het
+"reTerminal" uit de naam slaat op Seeeds Raspberry Pi-apparaten, maar de E-serie is
+een andere familie. Er zijn drie manieren om hem te programmeren:
+
+- **ESPHome** (gekozen). Alles wat HA-koppeling, knoppen, microfoon en touch is,
+  staat in YAML. Alleen het tekenen gebeurt in ESPHome altijd met kleine stukjes
+  C++ (`lambda`). Die staan gebundeld in `ink_kalender.h`, zodat de YAML leesbaar
+  blijft en de layout op de pc te testen en te previewen is. Je hoeft er niets aan
+  te doen; aanpassen kan via `substitutions`.
+- **ESPHome met LVGL**: widgets in YAML. Dat werkt goed voor vaste knoppen, maar
+  slecht voor een kalender met een wisselend aantal afspraken per dag.
+- **SenseCraft HMI**: de drag-and-drop-firmware van Seeed. Snel, maar zonder
+  inspreken en met beperkte koppeling naar HA.
 
 ## Preview en tests
 

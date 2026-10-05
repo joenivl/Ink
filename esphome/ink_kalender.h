@@ -5,8 +5,8 @@
 // ink-kalender.yaml klein blijft en dit bestand ook op de pc te testen en
 // te previewen is (zie tools/preview).
 //
-// Scherm staand: 1404 x 1872. Bovenaan de week, daaronder de maand,
-// notities en een knoppenbalk.
+// Scherm liggend: 1872 x 1404. Bovenaan de week, daaronder links de maand
+// en rechts de notities, onderaan een knoppenbalk.
 
 #ifdef INK_HOST
 #include "esphome_stub.h"
@@ -29,35 +29,45 @@ using esphome::display::TextAlign;
 
 // ---------------------------------------------------------------- maten ---
 
-constexpr int B = 1404;  // breedte (staand)
-constexpr int H = 1872;  // hoogte
+constexpr int B = 1872;  // breedte (liggend)
+constexpr int H = 1404;  // hoogte
 
-constexpr int KOLOM_B = 194;
-constexpr int MARGE = (B - 7 * KOLOM_B) / 2;
+constexpr int MARGE = 26;
+constexpr int BREED = B - 2 * MARGE;
 
-constexpr int KOP_H = 104;
-constexpr int WEEK_Y = 116;
-constexpr int WEEK_KOP_H = 62;
-constexpr int WEEK_EIND = 760;
-constexpr int MAAND_Y = 778;
-constexpr int GRID_Y = 832;
-constexpr int GRID_EIND = 1500;
-constexpr int NOTITIE_Y = 1518;
-constexpr int BALK_Y = 1712;
+constexpr int KOP_H = 96;
 
-constexpr int KNOP_Y = BALK_Y + 16;
-constexpr int KNOP_H = 130;
-constexpr int SPREEK_B = 520;
-constexpr int KNOP_TUSSEN = 14;
-constexpr int HA_KNOP_B = (7 * KOLOM_B - SPREEK_B - 4 * KNOP_TUSSEN) / 4;
+// Week over de volle breedte
+constexpr int WEEK_Y = 110;
+constexpr int WEEK_KOL = BREED / 7;
+constexpr int WEEK_KOP_H = 58;
+constexpr int WEEK_EIND = 600;
 
-constexpr int VENSTER_X = 110;
-constexpr int VENSTER_Y = 950;
-constexpr int VENSTER_B = B - 2 * VENSTER_X;
-constexpr int VENSTER_H = 520;
-constexpr int VENSTER_KNOP_Y = VENSTER_Y + VENSTER_H - 150;
-constexpr int VENSTER_KNOP_B = 500;
-constexpr int VENSTER_KNOP_H = 110;
+// Maand links, notities rechts
+constexpr int MAAND_KOL = 176;
+constexpr int MAAND_Y = 616;
+constexpr int GRID_Y = 662;
+constexpr int GRID_EIND = 1240;
+constexpr int NOTITIE_X = MARGE + 7 * MAAND_KOL + 44;
+constexpr int NOTITIE_B = B - MARGE - NOTITIE_X;
+constexpr int NOTITIE_Y = MAAND_Y;
+
+// Knoppenbalk
+constexpr int BALK_Y = 1256;
+constexpr int KNOP_Y = BALK_Y + 14;
+constexpr int KNOP_H = 120;
+constexpr int SPREEK_B = 620;
+constexpr int KNOP_TUSSEN = 16;
+constexpr int HA_KNOP_B = (BREED - SPREEK_B - 4 * KNOP_TUSSEN) / 4;
+
+// Pop-upvenster, midden op het scherm
+constexpr int VENSTER_B = 1120;
+constexpr int VENSTER_H = 480;
+constexpr int VENSTER_X = (B - VENSTER_B) / 2;
+constexpr int VENSTER_Y = 360;
+constexpr int VENSTER_KNOP_B = 440;
+constexpr int VENSTER_KNOP_H = 104;
+constexpr int VENSTER_KNOP_Y = VENSTER_Y + VENSTER_H - 144;
 
 // Wat er opnieuw getekend moet worden (bitmasker).
 constexpr uint8_t VOL = 1;      // alles, GC16 (mooi grijs, knippert)
@@ -340,13 +350,14 @@ inline void kader(Display &it, int x, int y, int w, int h, int dikte, Color kleu
 // --------------------------------------------------------------- tekenen ---
 
 inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
-  tekst(it, MARGE, 22, f.groot, ZWART, WIT, TextAlign::TOP_LEFT,
+  tekst(it, MARGE, 8, f.groot, ZWART, WIT, TextAlign::TOP_LEFT,
         s.tijd_geldig ? datum_lang(s.vandaag) : std::string("Ink kalender"));
 
   char buf[48];
+  std::string rechts;
   if (s.tijd_geldig) {
     std::snprintf(buf, sizeof(buf), "Week %d", iso_week(s.vandaag));
-    tekst(it, B - MARGE, 18, f.kop, ZWART, WIT, TextAlign::TOP_RIGHT, buf);
+    rechts = buf;
   }
   if (!std::isnan(s.temperatuur)) {
     if (!std::isnan(s.vochtigheid))
@@ -357,60 +368,72 @@ inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
     for (auto &c : t)
       if (c == '.')
         c = ',';
-    tekst(it, B - MARGE, 60, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_RIGHT, t);
+    tekst(it, B - MARGE, 30, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_RIGHT, t);
+    const int tb = breedte(it, f.normaal, t);
+    if (!rechts.empty())
+      tekst(it, B - MARGE - tb - 40, 24, f.kop, ZWART, WIT, TextAlign::TOP_RIGHT, rechts);
+  } else if (!rechts.empty()) {
+    tekst(it, B - MARGE, 24, f.kop, ZWART, WIT, TextAlign::TOP_RIGHT, rechts);
   }
   if (!s.verbonden || !s.data_ontvangen) {
     const std::string waarschuwing = !s.verbonden ? "Geen verbinding" : "Wacht op agenda…";
     const int w = breedte(it, f.vet, waarschuwing) + 28;
-    const int x = B / 2 + 140;
-    it.filled_rectangle(x, 26, w, 48, ZWART);
-    tekst(it, x + 14, 36, f.vet, WIT, ZWART, TextAlign::TOP_LEFT, waarschuwing);
+    const int x = B / 2 - w / 2;
+    it.filled_rectangle(x, 22, w, 52, ZWART);
+    tekst(it, x + 14, 26, f.vet, WIT, ZWART, TextAlign::TOP_LEFT, waarschuwing);
   }
-  it.filled_rectangle(MARGE, KOP_H, 7 * KOLOM_B, 3, ZWART);
+  it.filled_rectangle(MARGE, KOP_H, BREED, 3, ZWART);
 }
 
 // Hoogte die een afspraak in de weekkolom inneemt (en tekent als teken=true).
 inline int week_afspraak(Display &it, const Fonts &f, const Afspraak &a, int x, int y, int w, bool teken) {
-  constexpr int REGEL = 29;
+  constexpr int REGEL = 30;
   if (a.tijd.empty()) {
     auto regels = omloop(it, f.normaal, a.titel, w - 16, w - 16, 2);
     const int h = static_cast<int>(regels.size()) * REGEL + 10;
     if (teken) {
       it.filled_rectangle(x, y, w, h, GRIJS_LICHT);
       for (size_t i = 0; i < regels.size(); i++)
-        tekst(it, x + 8, y + 5 + i * REGEL, f.normaal, ZWART, GRIJS_LICHT, TextAlign::TOP_LEFT, regels[i]);
+        tekst(it, x + 8, y + 1 + i * REGEL, f.normaal, ZWART, GRIJS_LICHT, TextAlign::TOP_LEFT, regels[i]);
     }
     return h;
   }
-  const int tijd_b = breedte(it, f.vet, a.tijd) + 8;
+  const int tijd_b = breedte(it, f.vet, a.tijd) + 10;
   auto regels = omloop(it, f.normaal, a.titel, w - tijd_b, w, 3);
   const int h = static_cast<int>(regels.size()) * REGEL;
   if (teken) {
-    tekst(it, x, y, f.vet, ZWART, WIT, TextAlign::TOP_LEFT, a.tijd);
+    tekst(it, x, y - 4, f.vet, ZWART, WIT, TextAlign::TOP_LEFT, a.tijd);
     for (size_t i = 0; i < regels.size(); i++)
-      tekst(it, x + (i == 0 ? tijd_b : 0), y + i * REGEL, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, regels[i]);
+      tekst(it, x + (i == 0 ? tijd_b : 0), y - 4 + i * REGEL, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT,
+            regels[i]);
   }
   return h;
 }
 
 inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
   const Datum maandag = plus_dagen(s.vandaag, -weekdag(s.vandaag));
+  // Volledige dagnamen als ze allemaal passen naast de datum, anders "Ma", "Di", ...
+  bool lange_namen = true;
+  for (int i = 0; i < 7; i++)
+    if (breedte(it, f.kop, DAG_LANG[i]) + breedte(it, f.normaal, "30 sep") > WEEK_KOL - 10 - 14 - 36)
+      lange_namen = false;
   for (int i = 0; i < 7; i++) {
     const Datum dag = plus_dagen(maandag, i);
     const bool is_vandaag = s.tijd_geldig && dag == s.vandaag;
-    const int x = MARGE + i * KOLOM_B;
-    const int w = KOLOM_B - 8;
+    const int x = MARGE + i * WEEK_KOL;
+    const int w = WEEK_KOL - 10;
 
     const Color kop_achter = is_vandaag ? ZWART : GRIJS_LICHT;
     const Color kop_tekst = is_vandaag ? WIT : ZWART;
     it.filled_rectangle(x, WEEK_Y, w, WEEK_KOP_H, kop_achter);
-    tekst(it, x + 12, WEEK_Y + 14, f.kop, kop_tekst, kop_achter, TextAlign::TOP_LEFT, DAG_KORT[i]);
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%d %s", dag.d, MAAND_KORT[dag.m - 1]);
-    tekst(it, x + w - 10, WEEK_Y + 20, f.normaal, kop_tekst, kop_achter, TextAlign::TOP_RIGHT, buf);
+    tekst(it, x + w - 12, WEEK_Y + 9, f.normaal, kop_tekst, kop_achter, TextAlign::TOP_RIGHT, buf);
+    tekst(it, x + 14, WEEK_Y + 2, f.kop, kop_tekst, kop_achter, TextAlign::TOP_LEFT,
+          lange_namen ? DAG_LANG[i] : DAG_KORT[i]);
 
     if (i > 0)
-      it.vertical_line(x - 4, WEEK_Y + WEEK_KOP_H + 8, WEEK_EIND - WEEK_Y - WEEK_KOP_H - 8, GRIJS);
+      it.vertical_line(x - 5, WEEK_Y + WEEK_KOP_H + 8, WEEK_EIND - WEEK_Y - WEEK_KOP_H - 8, GRIJS);
 
     // Hele-dag-afspraken eerst (staan al vooraan door sortering in HA).
     std::vector<const Afspraak *> lijst;
@@ -426,7 +449,7 @@ inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
       if (y + h > WEEK_EIND - (laatste ? 0 : 34)) {
         char meer[16];
         std::snprintf(meer, sizeof(meer), "+%d meer", static_cast<int>(lijst.size() - n));
-        tekst(it, bx, y, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, meer);
+        tekst(it, bx, y - 4, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, meer);
         break;
       }
       week_afspraak(it, f, *lijst[n], bx, y, bw, true);
@@ -446,44 +469,44 @@ inline void teken_maand(Display &it, const Staat &s, const Fonts &f) {
   std::snprintf(buf, sizeof(buf), "%s %d", MAAND[s.vandaag.m - 1], s.vandaag.j);
   std::string titel = buf;
   titel[0] = static_cast<char>(titel[0] - 'a' + 'A');
-  tekst(it, MARGE, MAAND_Y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, titel);
+  tekst(it, MARGE, MAAND_Y - 6, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, titel);
 
-  constexpr int DAGKOP_H = 34;
+  constexpr int DAGKOP_H = 32;
   for (int i = 0; i < 7; i++)
-    tekst(it, MARGE + i * KOLOM_B + KOLOM_B / 2, GRID_Y, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_CENTER,
+    tekst(it, MARGE + i * MAAND_KOL + MAAND_KOL / 2, GRID_Y - 8, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_CENTER,
           DAG_KORT[i]);
 
   const int top = GRID_Y + DAGKOP_H;
   const int rij_h = (GRID_EIND - top) / rijen;
-  const int links = MARGE, rechts = MARGE + 7 * KOLOM_B;
+  const int links = MARGE, rechts = MARGE + 7 * MAAND_KOL;
   for (int r = 0; r <= rijen; r++)
     it.horizontal_line(links, top + r * rij_h, rechts - links, r == 0 || r == rijen ? ZWART : GRIJS);
   for (int c = 0; c <= 7; c++)
-    it.vertical_line(links + c * KOLOM_B, top, rij_h * rijen, c == 0 || c == 7 ? ZWART : GRIJS);
+    it.vertical_line(links + c * MAAND_KOL, top, rij_h * rijen, c == 0 || c == 7 ? ZWART : GRIJS);
 
   constexpr int REGEL = 23;
   for (int n = 0; n < rijen * 7; n++) {
     const Datum dag = plus_dagen(start, n);
-    const int x = links + (n % 7) * KOLOM_B;
+    const int x = links + (n % 7) * MAAND_KOL;
     const int y = top + (n / 7) * rij_h;
     const bool deze_maand = dag.m == s.vandaag.m;
     const bool is_vandaag = s.tijd_geldig && dag == s.vandaag;
 
     std::snprintf(buf, sizeof(buf), "%d", dag.d);
     if (is_vandaag) {
-      it.filled_rectangle(x + 1, y + 1, 46, 34, ZWART);
-      tekst(it, x + 24, y + 5, f.vet, WIT, ZWART, TextAlign::TOP_CENTER, buf);
+      it.filled_rectangle(x + 1, y + 1, 44, 32, ZWART);
+      tekst(it, x + 23, y - 2, f.vet, WIT, ZWART, TextAlign::TOP_CENTER, buf);
     } else {
-      tekst(it, x + 8, y + 5, f.vet, deze_maand ? ZWART : GRIJS, WIT, TextAlign::TOP_LEFT, buf);
+      tekst(it, x + 8, y - 2, f.vet, deze_maand ? ZWART : GRIJS, WIT, TextAlign::TOP_LEFT, buf);
     }
 
     const Color kleur = deze_maand ? ZWART : GRIJS_DONKER;
-    const int max_regels = (rij_h - 38) / REGEL;
+    const int max_regels = (rij_h - 36) / REGEL;
     std::vector<const Afspraak *> lijst;
     for (const auto &a : s.afspraken)
       if (a.datum == dag)
         lijst.push_back(&a);
-    int ty = y + 36;
+    int ty = y + 30;
     for (size_t i = 0; i < lijst.size() && static_cast<int>(i) < max_regels; i++) {
       const bool laatste_plek = static_cast<int>(i) == max_regels - 1;
       if (laatste_plek && lijst.size() > i + 1) {
@@ -493,42 +516,55 @@ inline void teken_maand(Display &it, const Staat &s, const Fonts &f) {
       }
       const Afspraak &a = *lijst[i];
       const std::string regel = a.tijd.empty() ? a.titel : a.tijd + " " + a.titel;
-      tekst(it, x + 8, ty, f.klein, kleur, WIT, TextAlign::TOP_LEFT, afkappen(it, f.klein, regel, KOLOM_B - 14));
+      tekst(it, x + 8, ty, f.klein, kleur, WIT, TextAlign::TOP_LEFT, afkappen(it, f.klein, regel, MAAND_KOL - 14));
       ty += REGEL;
     }
   }
 }
 
 inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
-  tekst(it, MARGE, NOTITIE_Y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, "Notities");
-  constexpr int REGEL = 36;
-  const int top = NOTITIE_Y + 48;
-  const int per_kolom = (BALK_Y - 12 - top) / REGEL;
-  const int kolom_b = 7 * KOLOM_B / 2;
+  tekst(it, NOTITIE_X, NOTITIE_Y - 6, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, "Notities");
+  constexpr int REGEL = 40;
+  const int top = GRID_Y + 32;
+  it.filled_rectangle(NOTITIE_X, top, NOTITIE_B, 2, ZWART);
+  // Gelinieerd, zoals op het whiteboard
+  const int regels = (GRID_EIND - top) / REGEL;
+  for (int r = 1; r <= regels; r++)
+    it.horizontal_line(NOTITIE_X, top + r * REGEL, NOTITIE_B, GRIJS);
   if (s.notities.empty()) {
-    tekst(it, MARGE, top, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Geen notities");
+    tekst(it, NOTITIE_X + 8, top + 2, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Geen notities");
     return;
   }
-  const int max = per_kolom * 2;
-  for (int i = 0; i < static_cast<int>(s.notities.size()) && i < max; i++) {
-    const int x = MARGE + (i / per_kolom) * kolom_b;
-    const int y = top + (i % per_kolom) * REGEL;
+  for (int i = 0; i < static_cast<int>(s.notities.size()) && i < regels; i++) {
+    const int y = top + i * REGEL;
     std::string t = s.notities[i];
-    if (i == max - 1 && static_cast<int>(s.notities.size()) > max) {
+    if (i == regels - 1 && static_cast<int>(s.notities.size()) > regels) {
       char buf[24];
       std::snprintf(buf, sizeof(buf), "+%d meer", static_cast<int>(s.notities.size()) - i);
       t = buf;
     }
-    it.filled_rectangle(x + 2, y + 10, 10, 10, ZWART);
-    tekst(it, x + 24, y, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, afkappen(it, f.normaal, t, kolom_b - 40));
+    it.filled_circle(NOTITIE_X + 12, y + 22, 5, ZWART);
+    tekst(it, NOTITIE_X + 28, y + 2, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT,
+          afkappen(it, f.normaal, t, NOTITIE_B - 36));
   }
 }
 
 inline int ha_knop_x(int i) { return MARGE + SPREEK_B + KNOP_TUSSEN + i * (HA_KNOP_B + KNOP_TUSSEN); }
 
+inline void teken_microfoon(Display &it, int mx, int my, Color voor, Color achter) {
+  for (int d = 0; d < 3; d++)
+    it.circle(mx, my - 2, 22 + d, voor);
+  it.filled_rectangle(mx - 26, my - 30, 52, 28, achter);  // bovenste helft van de boog weg
+  it.filled_rectangle(mx - 11, my - 34, 22, 40, voor);
+  it.filled_circle(mx, my - 34, 11, voor);
+  it.filled_circle(mx, my + 6, 11, voor);
+  it.filled_rectangle(mx - 2, my + 20, 4, 18, voor);
+  it.filled_rectangle(mx - 14, my + 36, 28, 4, voor);
+}
+
 inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
   it.filled_rectangle(0, BALK_Y, B, H - BALK_Y, WIT);
-  it.horizontal_line(MARGE, BALK_Y, 7 * KOLOM_B, ZWART);
+  it.horizontal_line(MARGE, BALK_Y, BREED, ZWART);
 
   // Spreekknop
   std::string label = "Afspraak inspreken";
@@ -545,23 +581,11 @@ inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
   const Color voor = actief ? WIT : ZWART;
   it.filled_rectangle(MARGE, KNOP_Y, SPREEK_B, KNOP_H, achter);
   kader(it, MARGE, KNOP_Y, SPREEK_B, KNOP_H, 4, ZWART);
-  // microfoontje
-  const int mx = MARGE + 50, my = KNOP_Y + KNOP_H / 2;
-  it.filled_rectangle(mx - 11, my - 34, 22, 40, voor);
-  it.filled_circle(mx, my - 34, 11, voor);
-  it.filled_circle(mx, my + 6, 11, voor);
-  for (int d = 0; d < 3; d++) {
-    it.circle(mx, my - 2, 22 + d, voor);
-  }
-  it.filled_rectangle(mx - 26, my - 30, 52, 28, achter);
-  it.filled_rectangle(mx - 11, my - 30, 22, 36, voor);
-  it.filled_rectangle(mx - 2, my + 20, 4, 18, voor);
-  it.filled_rectangle(mx - 14, my + 36, 28, 4, voor);
-
-  tekst(it, MARGE + 96, KNOP_Y + (hint.empty() ? 44 : 26), f.kop, voor, achter, TextAlign::TOP_LEFT, label);
+  teken_microfoon(it, MARGE + 56, KNOP_Y + KNOP_H / 2, voor, achter);
+  tekst(it, MARGE + 108, KNOP_Y + (hint.empty() ? 30 : 12), f.kop, voor, achter, TextAlign::TOP_LEFT, label);
   if (!hint.empty())
-    tekst(it, MARGE + 96, KNOP_Y + 74, f.klein, voor, achter, TextAlign::TOP_LEFT,
-          afkappen(it, f.klein, hint, SPREEK_B - 110));
+    tekst(it, MARGE + 108, KNOP_Y + 66, f.klein, voor, achter, TextAlign::TOP_LEFT,
+          afkappen(it, f.klein, hint, SPREEK_B - 124));
 
   // Home Assistant-knoppen
   for (int i = 0; i < 4; i++) {
@@ -573,12 +597,12 @@ inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
     const Color v = k.aan ? WIT : ZWART;
     it.filled_rectangle(x, KNOP_Y, HA_KNOP_B, KNOP_H, a);
     kader(it, x, KNOP_Y, HA_KNOP_B, KNOP_H, 3, ZWART);
-    auto regels = omloop(it, f.vet, k.naam, HA_KNOP_B - 20, HA_KNOP_B - 20, 2);
-    const int regel_h = 30;
-    const int ty = KNOP_Y + (KNOP_H - 34 - static_cast<int>(regels.size()) * regel_h) / 2;
+    auto regels = omloop(it, f.kop, k.naam, HA_KNOP_B - 24, HA_KNOP_B - 24, 2);
+    const int regel_h = 34;
+    const int ty = KNOP_Y + (KNOP_H - 30 - static_cast<int>(regels.size()) * regel_h) / 2 - 6;
     for (size_t r = 0; r < regels.size(); r++)
-      tekst(it, x + HA_KNOP_B / 2, ty + r * regel_h, f.vet, v, a, TextAlign::TOP_CENTER, regels[r]);
-    tekst(it, x + HA_KNOP_B / 2, KNOP_Y + KNOP_H - 38, f.klein, v, a, TextAlign::TOP_CENTER, k.aan ? "aan" : "uit");
+      tekst(it, x + HA_KNOP_B / 2, ty + r * regel_h, f.kop, v, a, TextAlign::TOP_CENTER, regels[r]);
+    tekst(it, x + HA_KNOP_B / 2, KNOP_Y + KNOP_H - 36, f.klein, v, a, TextAlign::TOP_CENTER, k.aan ? "aan" : "uit");
   }
 }
 
@@ -586,25 +610,25 @@ inline void venster_knop(Display &it, const Fonts &f, int x, const char *label, 
   const Color a = gevuld ? ZWART : WIT;
   it.filled_rectangle(x, VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H, a);
   kader(it, x, VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H, 4, ZWART);
-  tekst(it, x + VENSTER_KNOP_B / 2, VENSTER_KNOP_Y + 36, f.kop, gevuld ? WIT : ZWART, a, TextAlign::TOP_CENTER,
+  tekst(it, x + VENSTER_KNOP_B / 2, VENSTER_KNOP_Y + 26, f.kop, gevuld ? WIT : ZWART, a, TextAlign::TOP_CENTER,
         label);
 }
 
-inline int opslaan_x() { return VENSTER_X + 50; }
-inline int annuleer_x() { return VENSTER_X + VENSTER_B - 50 - VENSTER_KNOP_B; }
+inline int opslaan_x() { return VENSTER_X + 60; }
+inline int annuleer_x() { return VENSTER_X + VENSTER_B - 60 - VENSTER_KNOP_B; }
 inline int ok_x() { return VENSTER_X + (VENSTER_B - VENSTER_KNOP_B) / 2; }
 
 inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
   it.filled_rectangle(VENSTER_X, VENSTER_Y, VENSTER_B, VENSTER_H, WIT);
   kader(it, VENSTER_X, VENSTER_Y, VENSTER_B, VENSTER_H, 6, ZWART);
-  const int x = VENSTER_X + 50;
-  const int w = VENSTER_B - 100;
-  int y = VENSTER_Y + 40;
+  const int x = VENSTER_X + 60;
+  const int w = VENSTER_B - 120;
+  int y = VENSTER_Y + 36;
 
   if (s.status == MELDING) {
     for (const auto &r : omloop(it, f.kop, s.melding, w, w, 6)) {
       tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, r);
-      y += 44;
+      y += 48;
     }
     venster_knop(it, f, ok_x(), "OK", true);
     return;
@@ -612,12 +636,12 @@ inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
 
   const Voorstel &v = s.voorstel;
   tekst(it, x, y, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Nieuwe afspraak toevoegen?");
-  y += 44;
+  y += 46;
   for (const auto &r : omloop(it, f.groot, v.titel, w, w, 2)) {
     tekst(it, x, y, f.groot, ZWART, WIT, TextAlign::TOP_LEFT, r);
-    y += 60;
+    y += 66;
   }
-  y += 6;
+  y += 4;
   Datum d;
   std::string wanneer = lees_datum(v.datum, d) ? datum_lang(d) : v.datum;
   if (v.begin.empty())
@@ -625,7 +649,7 @@ inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
   else
     wanneer += "  ·  " + v.begin + (v.eind.empty() ? "" : " – " + v.eind);
   tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, afkappen(it, f.kop, wanneer, w));
-  y += 52;
+  y += 54;
   if (!v.gehoord.empty())
     tekst(it, x, y, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT,
           afkappen(it, f.normaal, "Gehoord: \"" + v.gehoord + "\"", w));
@@ -669,11 +693,11 @@ inline Zone raak(const Staat &s, int x, int y) {
       return ANNULEER;
   }
   // Iets ruimere vlakken in de balk; vingers zijn geen stylus.
-  if (binnen(x, y, MARGE - 10, KNOP_Y - 14, SPREEK_B + 17, KNOP_H + 28))
+  if (binnen(x, y, MARGE - 10, KNOP_Y - 14, SPREEK_B + 18, KNOP_H + 28))
     return SPREEK;
   for (int i = 0; i < 4; i++)
     if (!s.knoppen[i].naam.empty() &&
-        binnen(x, y, ha_knop_x(i) - 7, KNOP_Y - 14, HA_KNOP_B + KNOP_TUSSEN, KNOP_H + 28))
+        binnen(x, y, ha_knop_x(i) - 8, KNOP_Y - 14, HA_KNOP_B + KNOP_TUSSEN, KNOP_H + 28))
       return static_cast<Zone>(KNOP1 + i);
   return GEEN;
 }

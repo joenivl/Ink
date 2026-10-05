@@ -22,23 +22,25 @@ FONTS = HIER / "fonts"
 UIT = ROOT / "docs"
 
 # Moet overeenkomen met de font:-sectie in esphome/ink-kalender.yaml.
+FAMILIE = "Kalam"  # = substitution 'lettertype'
 FONT_DEFS = [  # (naam, gewicht, grootte)
-    ("klein", 400, 20),
-    ("normaal", 400, 24),
-    ("vet", 700, 24),
-    ("kop", 700, 30),
-    ("groot", 700, 46),
+    ("klein", 400, 22),
+    ("normaal", 400, 26),
+    ("vet", 700, 26),
+    ("kop", 700, 34),
+    ("groot", 700, 52),
 ]
 SCENARIOS = ["rust", "luisteren", "voorstel", "melding"]
 TEKENS = list(range(32, 0x250)) + [0x2013, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026]
 
 
 def font_bestand(gewicht: int) -> pathlib.Path:
-    pad = FONTS / f"roboto-{gewicht}.ttf"
+    pad = FONTS / f"{FAMILIE.lower().replace(' ', '_')}-{gewicht}.ttf"
     if not pad.exists():
         FONTS.mkdir(parents=True, exist_ok=True)
+        familie = FAMILIE.replace(" ", "+")
         req = urllib.request.Request(
-            f"https://fonts.googleapis.com/css2?family=Roboto:wght@{gewicht}",
+            f"https://fonts.googleapis.com/css2?family={familie}:wght@{gewicht}",
             headers={"User-Agent": "Wget/1.0"},  # geeft TTF-links i.p.v. WOFF2
         )
         css = urllib.request.urlopen(req).read().decode()
@@ -87,11 +89,11 @@ def compileer(bron: str) -> pathlib.Path:
 
 
 def teken(opdrachten: list, fonts: dict) -> Image.Image:
-    img = Image.new("L", (1404, 1872), 255)
+    img = Image.new("L", (1872, 1404), 255)
     d = ImageDraw.Draw(img)
     for o in opdrachten:
         if o["op"] == "fill":
-            d.rectangle([0, 0, 1403, 1871], fill=o["c"])
+            d.rectangle([0, 0, 1871, 1403], fill=o["c"])
         elif o["op"] == "rect":
             vak = [o["x"], o["y"], o["x"] + o["w"] - 1, o["y"] + o["h"] - 1]
             if o["fill"]:
