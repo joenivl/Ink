@@ -167,11 +167,12 @@ accu-icoontje met het percentage. Onder de 15% wordt dat vet, met "opladen!" erv
 
 ### Hoe lang gaat de accu mee?
 
-Het ligt helemaal aan of het apparaat aan blijft of slaapt:
+Het ligt helemaal aan of het apparaat wakker blijft of slaapt:
 
 | Situatie | Stroom | Accuduur (3000 mAh) |
 |---|---|---|
-| **Ink zoals gebouwd**: altijd aan (wifi, touch, knoppen, inspreken) | ~185 mA | **ca. 12–16 uur** |
+| Ink met **spaarstand uit**: altijd aan (wifi, touch, knoppen, inspreken) | ~185 mA | ca. 12–16 uur |
+| Ink met **spaarstand aan** (standaard, zie hieronder) | gemiddeld ~5–8 mA | **ca. 2–4 weken** (schatting) |
 | ESPHome met deep sleep, elke 4 uur verversen (standaard) | 4–5 mA in slaap | 20–30 dagen |
 | Idem, met geoptimaliseerde slaapstand | < 0,1 mA in slaap | 3–6 maanden |
 | Seeed-opgave: 1× per dag verversen | – | tot 6 maanden |
@@ -181,15 +182,41 @@ De stroomwaarden zijn metingen van het community-project
 op dezelfde hardware. Je kunt het zelf controleren door de USB-kabel eruit te halen
 en de geschiedenis van de sensor *Accu* in HA te bekijken.
 
-**Conclusie: laat het scherm aan de USB-C-voeding hangen.** De accu werkt dan als
-noodstroom bij een stroomstoring, of als je het scherm even van de koelkast pakt.
-Het dagelijkse verversen zelf kost bijna niets; het is de wifi en het
-"wakker blijven" voor touch en inspreken.
+## Spaarstand
 
-Een **spaarstand** zou kunnen: diep slapen, wakker worden door een tik of knop en
-elk half uur verversen. Dat haalt naar schatting 2–4 weken. De prijs is dat het
-scherm na een tik 5–10 seconden nodig heeft om wakker te worden en verbinding
-te maken voordat je kunt inspreken. Die stand is niet gebouwd.
+Staat standaard **aan** (schakelaar **Spaarstand** bij het apparaat in HA).
+
+| Wat | Wat je ziet |
+|---|---|
+| Een minuut niets gedaan | Onderin verschijnt **"Slaapstand – tik op het scherm om te wekken"**; de agenda blijft gewoon zichtbaar (e-paper heeft geen stroom nodig om een beeld te houden). |
+| Tik op het scherm of druk op een knop | Onderin **"Even wakker worden…"**; na een paar seconden ververst het scherm en werkt alles. De tik waarmee je wekt telt niet als tik op een knop. |
+| Groene knop terwijl hij slaapt | Wordt wakker en begint daarna meteen met luisteren. |
+| Elk half uur | Wordt stil wakker, haalt de agenda op en ververst **alleen als er iets veranderd is**. Daarna weer slapen. |
+| 's Nachts (23:00–6:00) | Slaapt door tot 6:00. |
+| Inspreken of een open venster | Gaat pas slapen als je klaar bent. |
+
+In te stellen bovenin `ink-kalender.yaml`: `wakker_na_gebruik`, `wekker_elke`,
+`nacht_van`/`nacht_tot` en `touch_wekt`.
+
+**Geschatte accuduur met spaarstand: 2–4 weken.** Dat is een schatting op basis van
+de metingen hierboven: ±35 stille rondes per dag van ~15 s, ~10 keer per dag
+gewekt en een minuut gebruikt, en een touch-chip die aan blijft om te kunnen wekken.
+Met `touch_wekt: "false"` (alleen wekken met de knoppen) eerder 5–7 weken. Bekijk de
+echte waarde na een paar dagen in de geschiedenis van *Accu*.
+
+**Goed om te weten:**
+- **Verbinding:** tijdens het slapen is het scherm offline. HA onthoudt de laatste
+  waarden (accu, temperatuur); de automatisering stuurt de agenda gewoon bij de
+  volgende ronde.
+- **Firmware-update:** maak het scherm eerst wakker met een tik en zet binnen een
+  minuut in HA de **Spaarstand** uit. Na de update zet je hem weer aan.
+- **Touch-wekken:** dat de touch-chip het scherm kan wekken, heb ik afgeleid uit de
+  schema's; op het apparaat is het nog niet getest. Wordt het scherm steeds meteen
+  weer wakker, dan schakelt Ink touch-wekken na drie keer zelf uit. Vanaf dan wek je
+  het met de knoppen, tot je een keer met een knop wekt. Werkt touch-wekken helemaal
+  niet, zet dan `touch_wekt: "false"`.
+- **Aan de stroom:** hangt hij aan USB-C, zet dan de spaarstand gewoon uit voor een
+  scherm dat altijd direct reageert.
 
 ## Waarom C++?
 

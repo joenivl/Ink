@@ -1,5 +1,5 @@
 // Previews van het scherm met voorbeelddata.
-// Gebruik: preview <week|maand|luisteren|voorstel|notitie|accu-laag|melding>  > opdrachten.jsonl
+// Gebruik: preview <week|maand|luisteren|voorstel|notitie|accu-laag|slaapstand|wakker-worden|melding>  > opdrachten.jsonl
 #include <cstring>
 
 #include "../../esphome/ink_kalender.h"
@@ -71,6 +71,10 @@ int main(int argc, char **argv) {
   } else if (!std::strcmp(scenario, "notitie")) {
     s.status = ink::VOORSTEL;
     s.voorstel = {"Cadeautje voor Faye kopen", "", "", "", "notitie cadeautje voor faye kopen", "notitie"};
+  } else if (!std::strcmp(scenario, "slaapstand")) {
+    s.slaap = ink::SLAAPT;
+  } else if (!std::strcmp(scenario, "wakker-worden")) {
+    s.slaap = ink::WORDT_WAKKER;
   } else if (!std::strcmp(scenario, "accu-laag")) {
     s.accu = 12.0f;
     s.verbonden = false;

@@ -50,6 +50,22 @@ int main() {
   assert(notities[1].uid.empty() && notities[1].tekst == "los");
   assert(notities[2].tekst == "Brood | kaas");
 
+  // Spaarstand: slaapduur (elke 30 min, 's nachts 23-6 door tot 6:00)
+  assert(slaapduur_ms(14, 0, 30, 23, 6) == 30u * 60 * 1000);
+  assert(slaapduur_ms(23, 0, 30, 23, 6) == 7u * 60 * 60 * 1000);
+  assert(slaapduur_ms(2, 30, 30, 23, 6) == 210u * 60 * 1000);
+  assert(slaapduur_ms(6, 0, 30, 23, 6) == 30u * 60 * 1000);
+  assert(slaapduur_ms(-1, 0, 30, 23, 6) == 30u * 60 * 1000);  // tijd onbekend
+  assert(slaapduur_ms(1, 0, 30, 0, 6) == 300u * 60 * 1000);   // nacht zonder middernacht-overgang
+
+  // Inhoud-hash: verandert met de agenda en de datum, niet met de schermstatus
+  Staat a, b;
+  a.ruw_afspraken = b.ruw_afspraken = "2026-10-05|-|x";
+  b.status = LUISTEREN;
+  assert(inhoud_hash(a) == inhoud_hash(b));
+  b.vandaag = {2026, 10, 6};
+  assert(inhoud_hash(a) != inhoud_hash(b));
+
   // UTF-8
   const std::string s = "café";
   assert(utf8_terug(s, s.size()) == 3);

@@ -13,6 +13,11 @@
 #include "esphome_stub.h"
 #else
 #include "esphome.h"
+#include <ctime>
+#include <driver/gpio.h>
+#include <driver/rtc_io.h>
+#include <esp_attr.h>
+#include <esp_sleep.h>
 #endif
 
 #include <algorithm>
@@ -255,6 +260,10 @@ enum Zone : int {
 
 enum Scherm : uint8_t { SCHERM_WEEK, SCHERM_MAAND };
 
+// Spaarstand: WAKKER = normaal; SLAAPT = balk toont "Slaapstand" (ook tijdens
+// een stille wekker-ronde); WORDT_WAKKER = gebruiker heeft gewekt, wacht op HA.
+enum Slaap : uint8_t { WAKKER, SLAAPT, WORDT_WAKKER };
+
 struct Voorstel {
   std::string titel, datum, begin, eind, gehoord;
   std::string soort;  // "afspraak" of "notitie"
@@ -281,6 +290,7 @@ struct Staat {
   float temperatuur{NAN};
   float vochtigheid{NAN};
   float accu{NAN};  // procent
+  Slaap slaap{WAKKER};
 };
 
 // Onder dit percentage waarschuwt het scherm om op te laden.
@@ -689,9 +699,35 @@ inline void teken_microfoon(Display &it, int mx, int my, Color voor, Color achte
   it.filled_rectangle(mx - 14, my + 36, 28, 4, voor);
 }
 
+inline void teken_slaapbalk(Display &it, const Staat &s, const Fonts &f) {
+  const bool wordt_wakker = s.slaap == WORDT_WAKKER;
+  // Alleen zwart/wit: deze balk wordt met de snelle DU-modus getekend.
+  const Color a = wordt_wakker ? ZWART : WIT;
+  const Color v = wordt_wakker ? WIT : ZWART;
+  it.filled_rectangle(MARGE, KNOP_Y, BREED, KNOP_H, a);
+  kader(it, MARGE, KNOP_Y, BREED, KNOP_H, 3, ZWART);
+  if (wordt_wakker) {
+    tekst(it, MARGE + 40, KNOP_Y + 14, f.groot, v, a, TextAlign::TOP_LEFT, "Even wakker worden…");
+    tekst(it, B - MARGE - 40, KNOP_Y + 40, f.normaal, v, a, TextAlign::TOP_RIGHT,
+          "verbinden met Home Assistant, een paar seconden");
+  } else {
+    // Maantje
+    it.filled_circle(MARGE + 70, KNOP_Y + KNOP_H / 2, 30, v);
+    it.filled_circle(MARGE + 84, KNOP_Y + KNOP_H / 2 - 12, 28, a);
+    tekst(it, MARGE + 130, KNOP_Y + 14, f.groot, v, a, TextAlign::TOP_LEFT, "Slaapstand");
+    tekst(it, B - MARGE - 40, KNOP_Y + 22, f.kop, v, a, TextAlign::TOP_RIGHT, "Tik op het scherm om te wekken");
+    tekst(it, B - MARGE - 40, KNOP_Y + 68, f.normaal, v, a, TextAlign::TOP_RIGHT,
+          "of druk op een knop · de agenda ververst vanzelf");
+  }
+}
+
 inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
   it.filled_rectangle(0, BALK_Y, B, H - BALK_Y, WIT);
   it.horizontal_line(MARGE, BALK_Y, BREED, ZWART);
+  if (s.slaap != WAKKER) {
+    teken_slaapbalk(it, s, f);
+    return;
+  }
 
   // Spreekknop
   std::string label = "Inspreken";
@@ -831,6 +867,8 @@ inline bool binnen(int x, int y, int bx, int by, int bw, int bh) {
 }
 
 inline Zone raak(const Staat &s, int x, int y) {
+  if (s.slaap != WAKKER)
+    return GEEN;  // eerst wakker worden
   if (venster_open(s)) {
     if (s.status == MELDING)
       return binnen(x, y, ok_x(), VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H) ? OK : GEEN;
@@ -861,5 +899,118 @@ inline Zone raak(const Staat &s, int x, int y) {
       return static_cast<Zone>(KNOP1 + i);
   return GEEN;
 }
+
+// ------------------------------------------------------------ spaarstand ---
+
+// Vingerafdruk van wat er op het scherm staat (zonder de knoppenbalk). Een
+// stille wekker-ronde ververst alleen als die verandert.
+inline uint32_t inhoud_hash(const Staat &s) {
+  uint32_t h = 2166136261u;  // FNV-1a
+  auto voeg_toe = [&h](const std::string &t) {
+    for (unsigned char c : t)
+      h = (h ^ c) * 16777619u;
+    h = (h ^ 0xFF) * 16777619u;
+  };
+  voeg_toe(s.ruw_afspraken);
+  voeg_toe(s.ruw_notities);
+  char buf[32];
+  const int accu_stap = std::isnan(s.accu) ? -2 : (s.accu <= ACCU_LAAG ? -1 : static_cast<int>(s.accu) / 10);
+  std::snprintf(buf, sizeof(buf), "%d-%d-%d/%d/%d", s.vandaag.j, s.vandaag.m, s.vandaag.d, accu_stap,
+                s.verbonden ? 1 : 0);
+  voeg_toe(buf);
+  return h;
+}
+
+// Slaapduur tot de volgende stille ronde: elke `elke_min` minuten, maar 's nachts
+// (van `nacht_van` tot `nacht_tot` uur) in één keer door tot de ochtend.
+inline uint32_t slaapduur_ms(int uur, int minuut, int elke_min, int nacht_van, int nacht_tot) {
+  const bool nacht = nacht_van > nacht_tot ? (uur >= nacht_van || uur < nacht_tot)
+                                           : (uur >= nacht_van && uur < nacht_tot);
+  if (uur < 0 || !nacht)
+    return static_cast<uint32_t>(elke_min) * 60u * 1000u;
+  int tot_ochtend = (nacht_tot * 60) - (uur * 60 + minuut);
+  if (tot_ochtend <= 0)
+    tot_ochtend += 24 * 60;
+  return static_cast<uint32_t>(tot_ochtend) * 60u * 1000u;
+}
+
+#ifndef INK_HOST
+// Blijft bewaard tijdens deep sleep (RTC-geheugen), niet na stroomverlies.
+static RTC_DATA_ATTR uint32_t rtc_inhoud_hash = 0;
+static RTC_DATA_ATTR time_t rtc_slaap_begin = 0;
+static RTC_DATA_ATTR uint8_t rtc_snelle_touch_wekkers = 0;
+
+enum Wekreden : int { WEK_STROOM = 0, WEK_TIMER = 1, WEK_GEBRUIKER = 2 };
+
+constexpr gpio_num_t PIN_TOUCH_INT = GPIO_NUM_2;
+constexpr gpio_num_t PIN_KNOP_GROEN = GPIO_NUM_3;
+constexpr gpio_num_t KNOPPEN[] = {GPIO_NUM_3, GPIO_NUM_4, GPIO_NUM_5};
+// Uitgangen die tijdens de slaap laag moeten blijven (zie README, Spaarstand)
+constexpr gpio_num_t UIT_IN_SLAAP[] = {GPIO_NUM_11, GPIO_NUM_21, GPIO_NUM_38, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_45};
+constexpr gpio_num_t PIN_TOUCH_RESET = GPIO_NUM_48;
+
+inline Wekreden wekreden() {
+  switch (esp_sleep_get_wakeup_cause()) {
+    case ESP_SLEEP_WAKEUP_TIMER:
+      return WEK_TIMER;
+    case ESP_SLEEP_WAKEUP_EXT1:
+      return WEK_GEBRUIKER;
+    default:
+      return WEK_STROOM;
+  }
+}
+
+inline bool gewekt_door(gpio_num_t pin) {
+  return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1 &&
+         (esp_sleep_get_ext1_wakeup_status() & (1ULL << pin));
+}
+
+// Direct na het opstarten: vastgezette pinnen weer vrijgeven en bijhouden of
+// de touch-chip ons steeds meteen wakker maakt (dan touch-wekken uitzetten).
+inline void na_wakker_worden() {
+  for (gpio_num_t pin : UIT_IN_SLAAP)
+    gpio_hold_dis(pin);
+  gpio_hold_dis(PIN_TOUCH_RESET);
+  gpio_deep_sleep_hold_dis();
+  if (gewekt_door(PIN_TOUCH_INT) && rtc_slaap_begin != 0 && std::time(nullptr) - rtc_slaap_begin < 5) {
+    if (rtc_snelle_touch_wekkers < 255)
+      rtc_snelle_touch_wekkers++;
+  } else if (wekreden() == WEK_GEBRUIKER && !gewekt_door(PIN_TOUCH_INT)) {
+    rtc_snelle_touch_wekkers = 0;  // met een knop gewekt: touch opnieuw proberen
+  }
+}
+
+inline bool touch_wekken_actief(bool ingesteld) { return ingesteld && rtc_snelle_touch_wekkers < 3; }
+
+// Vlak voor deep sleep: randapparatuur uit, wekbronnen instellen.
+inline void bereid_slaap_voor(bool touch_wekt) {
+  const bool touch = touch_wekken_actief(touch_wekt);
+  for (gpio_num_t pin : UIT_IN_SLAAP) {
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+    gpio_set_level(pin, 0);
+    gpio_hold_en(pin);
+  }
+  // Touch-chip aan laten (reset hoog) als die mag wekken, anders uit.
+  gpio_set_direction(PIN_TOUCH_RESET, GPIO_MODE_OUTPUT);
+  gpio_set_level(PIN_TOUCH_RESET, touch ? 1 : 0);
+  gpio_hold_en(PIN_TOUCH_RESET);
+  gpio_deep_sleep_hold_en();
+
+  uint64_t masker = 0;
+  for (gpio_num_t pin : KNOPPEN) {
+    masker |= 1ULL << pin;
+    rtc_gpio_pullup_en(pin);
+    rtc_gpio_pulldown_dis(pin);
+  }
+  if (touch) {
+    masker |= 1ULL << PIN_TOUCH_INT;
+    rtc_gpio_pullup_en(PIN_TOUCH_INT);
+    rtc_gpio_pulldown_dis(PIN_TOUCH_INT);
+  }
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+  esp_sleep_enable_ext1_wakeup(masker, ESP_EXT1_WAKEUP_ANY_LOW);
+  rtc_slaap_begin = std::time(nullptr);
+}
+#endif
 
 }  // namespace ink

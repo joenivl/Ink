@@ -4,6 +4,7 @@
 # - knoppen om Home Assistant te bedienen
 # - afspraken en notities inspreken via de ingebouwde microfoon
 # - notities afvinken door erop te tikken
+# - spaarstand: slaapt tussendoor, wakker door een tik of knop
 #
 # Hoort bij de blueprint homeassistant/blueprints/ink_kalender.yaml.
 # Installatie: zie README.md.
@@ -29,6 +30,18 @@ substitutions:
   # Na zoveel tijd op het maandscherm terug naar de week.
   terug_naar_week_na: 5min
 
+  # Spaarstand (aan/uit ook via de schakelaar "Spaarstand" in HA).
+  # Het scherm slaapt na `wakker_na_gebruik` zonder aanraking, wordt elke
+  # `wekker_elke` minuten stil wakker om de agenda te verversen en slaapt 's
+  # nachts door van `nacht_van` tot `nacht_tot` uur. Wekken: tik of knop.
+  spaarstand_bij_start: RESTORE_DEFAULT_ON
+  wakker_na_gebruik: 60s
+  wekker_elke: "30"
+  nacht_van: "23"
+  nacht_tot: "6"
+  # Zet op "false" als het scherm meteen weer wakker wordt (dan alleen de knoppen).
+  touch_wekt: "true"
+
   # Knoppen onderaan. Werkt met alles wat homeassistant.toggle snapt
   # (lampen, schakelaars, scripts, groepen). Naam leeg = knop verbergen.
   knop1_naam: Woonkamer
@@ -47,6 +60,20 @@ esphome:
   includes:
     - ink_kalender.h
   on_boot:
+    # Vóór de hardware wordt ingesteld: vastgezette pinnen vrijgeven en
+    # kijken waarom we wakker zijn.
+    - priority: 900
+      then:
+        - lambda: |-
+            ink::na_wakker_worden();
+            id(wekreden) = ink::wekreden();
+            auto &s = ink::staat();
+            if (id(wekreden) == ink::WEK_TIMER) {
+              s.slaap = ink::SLAAPT;  // stille ronde
+            } else if (id(wekreden) == ink::WEK_GEBRUIKER) {
+              s.slaap = ink::WORDT_WAKKER;
+              id(spreek_na_wekken) = ink::gewekt_door(ink::PIN_KNOP_GROEN);
+            }
     - priority: 600
       then:
         - output.turn_on: mic_stroom
@@ -60,8 +87,25 @@ esphome:
             s.knoppen[3].naam = "${knop4_naam}";
     - priority: -100
       then:
-        - lambda: ink::ververs_mask() |= ink::VOL;
+        - lambda: |-
+            // Stille ronde: niets tekenen tot we weten of er iets veranderd is.
+            if (id(wekreden) == ink::WEK_STROOM)
+              ink::ververs_mask() |= ink::VOL;
+            else if (id(wekreden) == ink::WEK_GEBRUIKER)
+              ink::ververs_mask() |= ink::BALK;  // "Even wakker worden…"
         - script.execute: ververs
+        - if:
+            condition:
+              lambda: return id(wekreden) == ink::WEK_TIMER;
+            then:
+              - script.execute: stille_ronde_timeout
+            else:
+              - script.execute: slaap_timer
+        - if:
+            condition:
+              lambda: return id(wekreden) == ink::WEK_GEBRUIKER;
+            then:
+              - script.execute: wakker_timeout
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -79,7 +123,7 @@ api:
   encryption:
     key: !secret api_sleutel
   on_client_connected:
-    - delay: 5s
+    - delay: 2s
     # Vraag Home Assistant om de agenda te sturen.
     - homeassistant.event:
         event: esphome.ink_klaar
@@ -91,6 +135,13 @@ api:
       then:
         - lambda: |-
             auto &s = ink::staat();
+            auto nu = id(ha_tijd).now();
+            if (!nu.is_valid())
+              nu = id(rtc_tijd).now();
+            if (nu.is_valid()) {
+              s.vandaag = {nu.year, nu.month, nu.day_of_month};
+              s.tijd_geldig = true;
+            }
             const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken || s.ruw_notities != notities;
             if (nieuw) {
               s.ruw_afspraken = afspraken;
@@ -99,11 +150,30 @@ api:
               s.notities = ink::lees_notities(notities);
               s.data_ontvangen = true;
             }
-            if (nieuw || id(wacht_op_agenda)) {
+            if (s.slaap == ink::SLAAPT) {
+              // Stille ronde: alleen verversen als er iets veranderd is sinds het inslapen.
+              if (ink::inhoud_hash(s) != ink::rtc_inhoud_hash)
+                ink::ververs_mask() |= ink::VOL;
+            } else if (s.slaap == ink::WORDT_WAKKER) {
+              s.slaap = ink::WAKKER;
+              id(net_wakker) = true;
+              ink::ververs_mask() |= ink::VOL;
+            } else if (nieuw || id(wacht_op_agenda)) {
               id(wacht_op_agenda) = false;
               ink::ververs_mask() |= ink::VOL;
             }
         - script.execute: ververs
+        - if:
+            condition:
+              lambda: return ink::staat().slaap == ink::SLAAPT;
+            then:
+              - script.execute: ga_slapen
+        - if:
+            condition:
+              lambda: return id(net_wakker);
+            then:
+              - lambda: id(net_wakker) = false;
+              - script.execute: klaar_met_wekken
     - action: toon_voorstel
       variables:
         titel: string
@@ -120,6 +190,7 @@ api:
             ink::ververs_mask() |= ink::VENSTER | ink::BALK;
         - script.execute: ververs
         - script.execute: venster_sluiten_na_tijd
+        - script.execute: slaap_timer
     - action: toon_melding
       variables:
         tekst: string
@@ -162,6 +233,15 @@ globals:
   - id: minuten_offline
     type: int
     initial_value: "0"
+  - id: wekreden
+    type: int
+    initial_value: "0"
+  - id: spreek_na_wekken
+    type: bool
+    initial_value: "false"
+  - id: net_wakker
+    type: bool
+    initial_value: "false"
 
 time:
   - platform: pcf8563
@@ -179,7 +259,9 @@ time:
         minutes: 0
         hours: 0
         then:
-          - lambda: ink::ververs_mask() |= ink::VOL;
+          - lambda: |-
+              if (ink::staat().slaap == ink::WAKKER)
+                ink::ververs_mask() |= ink::VOL;
           - script.execute: ververs
 
 interval:
@@ -193,7 +275,8 @@ interval:
           const bool nu = id(minuten_offline) < 5;
           if (nu != s.verbonden) {
             s.verbonden = nu;
-            ink::ververs_mask() |= ink::VOL;
+            if (s.slaap == ink::WAKKER)
+              ink::ververs_mask() |= ink::VOL;
           }
       - script.execute: ververs
 
@@ -252,9 +335,10 @@ sensor:
       - lambda: |-
           auto &s = ink::staat();
           auto emmer = [](float p) { return p <= ink::ACCU_LAAG ? -1 : static_cast<int>(p) / 10; };
-          const bool anders = std::isnan(s.accu) || emmer(s.accu) != emmer(x);
+          // De eerste meting na het opstarten gaat mee met de eerste volledige verversing.
+          const bool anders = !std::isnan(s.accu) && emmer(s.accu) != emmer(x);
           s.accu = x;
-          if (anders)
+          if (anders && s.slaap == ink::WAKKER)
             ink::ververs_mask() |= ink::VOL;
       - script.execute: ververs
   - platform: sht4x
@@ -339,8 +423,15 @@ binary_sensor:
       mode: INPUT_PULLUP
       inverted: true
     on_press:
-      - lambda: ink::ververs_mask() |= ink::VOL;
-      - script.execute: ververs
+      - if:
+          condition:
+            lambda: return ink::staat().slaap != ink::WAKKER;
+          then:
+            - script.execute: wek_op
+          else:
+            - script.execute: slaap_timer
+            - lambda: ink::ververs_mask() |= ink::VOL;
+            - script.execute: ververs
   - platform: gpio
     id: knop_wit_links
     pin:
@@ -348,10 +439,17 @@ binary_sensor:
       mode: INPUT_PULLUP
       inverted: true
     on_press:
-      - script.execute:
-          id: wissel_scherm
-          scherm: !lambda |-
-            return ink::staat().scherm == ink::SCHERM_WEEK ? ink::SCHERM_MAAND : ink::SCHERM_WEEK;
+      - if:
+          condition:
+            lambda: return ink::staat().slaap != ink::WAKKER;
+          then:
+            - script.execute: wek_op
+          else:
+            - script.execute: slaap_timer
+            - script.execute:
+                id: wissel_scherm
+                scherm: !lambda |-
+                  return ink::staat().scherm == ink::SCHERM_WEEK ? ink::SCHERM_MAAND : ink::SCHERM_WEEK;
 
 i2s_audio:
   - id: i2s_mic
@@ -404,6 +502,7 @@ voice_assistant:
               tekst: !lambda |-
                 return "Spraakherkenning mislukt: " + message;
   on_end:
+    - script.execute: slaap_timer
     - if:
         condition:
           lambda: return !id(spraak_tekst_ontvangen) && ink::staat().status == ink::LUISTEREN;
@@ -411,6 +510,24 @@ voice_assistant:
           - script.execute:
               id: zet_status
               status: !lambda return ink::RUST;
+
+deep_sleep:
+  id: slaap
+
+switch:
+  - platform: template
+    id: spaarstand
+    name: Spaarstand
+    icon: mdi:sleep
+    optimistic: true
+    restore_mode: ${spaarstand_bij_start}
+    entity_category: config
+    on_turn_on:
+      - script.execute: slaap_timer
+    on_turn_off:
+      - script.stop: slaap_timer
+      - script.stop: ga_slapen
+      - script.execute: wek_op
 
 touchscreen:
   - platform: gt911
@@ -426,7 +543,7 @@ touchscreen:
           ESP_LOGI("ink", "Aanraking op x=%d, y=%d", touch.x, touch.y);
       - script.execute:
           id: tik
-          zone: !lambda return ink::raak(ink::staat(), touch.x, touch.y);
+          zone: !lambda return ink::raak(ink::staat(), touch.x, touch.y);  # GEEN als hij slaapt
 
 script:
   # Vraagt een schermverversing aan voor alles wat in ververs_mask staat.
@@ -529,7 +646,8 @@ script:
           const bool aan = status == "on" || status == "open" || status == "playing" || status == "home";
           if (aan != k.aan) {
             k.aan = aan;
-            ink::ververs_mask() |= ink::BALK;
+            if (ink::staat().slaap == ink::WAKKER)
+              ink::ververs_mask() |= ink::BALK;
           }
       - script.execute: ververs
 
@@ -560,97 +678,230 @@ script:
           id: wissel_scherm
           scherm: !lambda return ink::SCHERM_WEEK;
 
+  # --- spaarstand ---------------------------------------------------------
+  # Na een tijd zonder gebruik gaan slapen (niet tijdens inspreken of een venster).
+  - id: slaap_timer
+    mode: restart
+    then:
+      - delay: ${wakker_na_gebruik}
+      - if:
+          condition:
+            lambda: return id(spaarstand).state && ink::staat().slaap == ink::WAKKER;
+          then:
+            - if:
+                condition:
+                  or:
+                    - voice_assistant.is_running
+                    - lambda: return ink::staat().status != ink::RUST;
+                then:
+                  - script.execute: slaap_timer
+                else:
+                  - script.execute: ga_slapen
+
+  - id: ga_slapen
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: return id(spaarstand).state;
+          then:
+            - script.stop: slaap_timer
+            - lambda: |-
+                auto &s = ink::staat();
+                if (s.slaap != ink::SLAAPT) {
+                  // Slaapbalk tonen. Stond er een venster of de maand, dan het
+                  // hele scherm terug naar de week.
+                  const bool alles = ink::venster_open(s) || s.scherm != ink::SCHERM_WEEK;
+                  s.slaap = ink::SLAAPT;
+                  s.status = ink::RUST;
+                  s.scherm = ink::SCHERM_WEEK;
+                  ink::ververs_mask() |= alles ? ink::VOL : ink::BALK;
+                }
+            - script.execute: ververs
+            # Wachten tot het scherm klaar is met verversen
+            - delay: 6s
+            - lambda: |-
+                ink::rtc_inhoud_hash = ink::inhoud_hash(ink::staat());
+                ink::bereid_slaap_voor(${touch_wekt});
+            - deep_sleep.enter:
+                id: slaap
+                sleep_duration: !lambda |-
+                  auto nu = id(ha_tijd).now();
+                  if (!nu.is_valid())
+                    nu = id(rtc_tijd).now();
+                  return ink::slaapduur_ms(nu.is_valid() ? nu.hour : -1, nu.is_valid() ? nu.minute : 0,
+                                           ${wekker_elke}, ${nacht_van}, ${nacht_tot});
+
+  # Gewekt (of tik tijdens een stille ronde): als de agenda er al is meteen
+  # tonen, anders "Even wakker worden…" tot Home Assistant hem stuurt.
+  - id: wek_op
+    mode: single
+    then:
+      - script.stop: ga_slapen
+      - script.stop: stille_ronde_timeout
+      - lambda: |-
+          auto &s = ink::staat();
+          if (s.slaap == ink::SLAAPT && s.data_ontvangen) {
+            s.slaap = ink::WAKKER;
+            id(net_wakker) = true;
+            ink::ververs_mask() |= ink::VOL;
+          } else if (s.slaap == ink::SLAAPT) {
+            s.slaap = ink::WORDT_WAKKER;
+            ink::ververs_mask() |= ink::BALK;
+          }
+      - script.execute: ververs
+      - if:
+          condition:
+            lambda: return id(net_wakker);
+          then:
+            - lambda: id(net_wakker) = false;
+            - script.execute: klaar_met_wekken
+          else:
+            - script.execute: wakker_timeout
+
+  - id: klaar_met_wekken
+    then:
+      - script.stop: wakker_timeout
+      - script.execute: slaap_timer
+      - if:
+          condition:
+            lambda: return id(spreek_na_wekken);
+          then:
+            - lambda: id(spreek_na_wekken) = false;
+            - delay: 500ms
+            - script.execute:
+                id: tik
+                zone: !lambda return ink::SPREEK;
+
+  # Gewekt, maar Home Assistant reageert niet
+  - id: wakker_timeout
+    mode: restart
+    then:
+      - delay: 40s
+      - if:
+          condition:
+            lambda: return ink::staat().slaap == ink::WORDT_WAKKER;
+          then:
+            - lambda: ink::staat().slaap = ink::WAKKER;
+            - script.execute:
+                id: melding
+                tekst: Geen verbinding met Home Assistant. Probeer het straks nog eens.
+            - script.execute: slaap_timer
+
+  # Stille ronde zonder antwoord van Home Assistant: weer gaan slapen
+  - id: stille_ronde_timeout
+    mode: restart
+    then:
+      - delay: 45s
+      - if:
+          condition:
+            lambda: return ink::staat().slaap == ink::SLAAPT;
+          then:
+            - script.execute: ga_slapen
+
   - id: tik
     parameters:
       zone: int
     then:
+      # Slaapt hij (of wordt hij wakker)? Dan eerst wekken. De groene knop
+      # start daarna meteen het inspreken.
       - if:
           condition:
-            lambda: return zone != ink::GEEN;
+            lambda: return ink::staat().slaap != ink::WAKKER;
           then:
-            - script.execute: piep
-      # Tabs
-      - if:
-          condition:
-            lambda: return zone == ink::TAB_WEEK || zone == ink::TAB_MAAND;
-          then:
-            - script.execute:
-                id: wissel_scherm
-                scherm: !lambda |-
-                  return zone == ink::TAB_MAAND ? ink::SCHERM_MAAND : ink::SCHERM_WEEK;
-      # Spreken
-      - if:
-          condition:
-            lambda: return zone == ink::SPREEK;
-          then:
+            - lambda: |-
+                if (zone == ink::SPREEK)
+                  id(spreek_na_wekken) = true;
+            - script.execute: wek_op
+          else:
+            - script.execute: slaap_timer
             - if:
-                condition: voice_assistant.is_running
+                condition:
+                  lambda: return zone != ink::GEEN;
                 then:
-                  - voice_assistant.stop:
-                else:
+                  - script.execute: piep
+            # Tabs
+            - if:
+                condition:
+                  lambda: return zone == ink::TAB_WEEK || zone == ink::TAB_MAAND;
+                then:
+                  - script.execute:
+                      id: wissel_scherm
+                      scherm: !lambda |-
+                        return zone == ink::TAB_MAAND ? ink::SCHERM_MAAND : ink::SCHERM_WEEK;
+            # Spreken
+            - if:
+                condition:
+                  lambda: return zone == ink::SPREEK;
+                then:
+                  - if:
+                      condition: voice_assistant.is_running
+                      then:
+                        - voice_assistant.stop:
+                      else:
+                        - script.stop: venster_sluiten_na_tijd
+                        - lambda: id(spraak_tekst_ontvangen) = false;
+                        - script.execute:
+                            id: zet_status
+                            status: !lambda return ink::LUISTEREN;
+                        - voice_assistant.start:
+            # Home Assistant-knoppen
+            - if:
+                condition:
+                  lambda: return zone >= ink::KNOP1 && zone < ink::KNOP1 + 4;
+                then:
+                  - homeassistant.action:
+                      action: homeassistant.toggle
+                      data:
+                        entity_id: !lambda |-
+                          static const char *const entiteiten[] = {
+                              "${knop1_entiteit}", "${knop2_entiteit}", "${knop3_entiteit}", "${knop4_entiteit}"};
+                          return std::string(entiteiten[zone - ink::KNOP1]);
+            # Notitie afvinken (meteen doorgestreept; HA haalt hem daarna weg)
+            - if:
+                condition:
+                  lambda: |-
+                    const int i = zone - ink::NOTITIE0;
+                    return i >= 0 && i < (int) ink::staat().notities.size() && !ink::staat().notities[i].afgevinkt;
+                then:
+                  - homeassistant.event:
+                      event: esphome.ink_afvinken
+                      data:
+                        lijst: !lambda return ink::staat().notities[zone - ink::NOTITIE0].lijst;
+                        uid: !lambda return ink::staat().notities[zone - ink::NOTITIE0].uid;
+                  - lambda: |-
+                      ink::staat().notities[zone - ink::NOTITIE0].afgevinkt = true;
+                      ink::ververs_mask() |= ink::NOTITIES;
+                  - script.execute: ververs
+            # Voorstel opslaan
+            - if:
+                condition:
+                  lambda: return zone == ink::OPSLAAN;
+                then:
+                  - homeassistant.event:
+                      event: esphome.ink_opslaan
+                      data:
+                        titel: !lambda return ink::staat().voorstel.titel;
+                        datum: !lambda return ink::staat().voorstel.datum;
+                        begin: !lambda return ink::staat().voorstel.begin;
+                        eind: !lambda return ink::staat().voorstel.eind;
+                        soort: !lambda return ink::staat().voorstel.soort;
                   - script.stop: venster_sluiten_na_tijd
-                  - lambda: id(spraak_tekst_ontvangen) = false;
+                  - lambda: |-
+                      ink::staat().status = ink::RUST;
+                      id(wacht_op_agenda) = true;
+                      ink::ververs_mask() |= ink::BALK;
+                  - script.execute: ververs
+                  - script.execute: wacht_op_agenda_timeout
+            # Annuleren / OK
+            - if:
+                condition:
+                  lambda: return zone == ink::ANNULEER || zone == ink::OK;
+                then:
+                  - script.stop: venster_sluiten_na_tijd
                   - script.execute:
                       id: zet_status
-                      status: !lambda return ink::LUISTEREN;
-                  - voice_assistant.start:
-      # Home Assistant-knoppen
-      - if:
-          condition:
-            lambda: return zone >= ink::KNOP1 && zone < ink::KNOP1 + 4;
-          then:
-            - homeassistant.action:
-                action: homeassistant.toggle
-                data:
-                  entity_id: !lambda |-
-                    static const char *const entiteiten[] = {
-                        "${knop1_entiteit}", "${knop2_entiteit}", "${knop3_entiteit}", "${knop4_entiteit}"};
-                    return std::string(entiteiten[zone - ink::KNOP1]);
-      # Notitie afvinken (meteen doorgestreept; HA haalt hem daarna weg)
-      - if:
-          condition:
-            lambda: |-
-              const int i = zone - ink::NOTITIE0;
-              return i >= 0 && i < (int) ink::staat().notities.size() && !ink::staat().notities[i].afgevinkt;
-          then:
-            - homeassistant.event:
-                event: esphome.ink_afvinken
-                data:
-                  lijst: !lambda return ink::staat().notities[zone - ink::NOTITIE0].lijst;
-                  uid: !lambda return ink::staat().notities[zone - ink::NOTITIE0].uid;
-            - lambda: |-
-                ink::staat().notities[zone - ink::NOTITIE0].afgevinkt = true;
-                ink::ververs_mask() |= ink::NOTITIES;
-            - script.execute: ververs
-      # Voorstel opslaan
-      - if:
-          condition:
-            lambda: return zone == ink::OPSLAAN;
-          then:
-            - homeassistant.event:
-                event: esphome.ink_opslaan
-                data:
-                  titel: !lambda return ink::staat().voorstel.titel;
-                  datum: !lambda return ink::staat().voorstel.datum;
-                  begin: !lambda return ink::staat().voorstel.begin;
-                  eind: !lambda return ink::staat().voorstel.eind;
-                  soort: !lambda return ink::staat().voorstel.soort;
-            - script.stop: venster_sluiten_na_tijd
-            - lambda: |-
-                ink::staat().status = ink::RUST;
-                id(wacht_op_agenda) = true;
-                ink::ververs_mask() |= ink::BALK;
-            - script.execute: ververs
-            - script.execute: wacht_op_agenda_timeout
-      # Annuleren / OK
-      - if:
-          condition:
-            lambda: return zone == ink::ANNULEER || zone == ink::OK;
-          then:
-            - script.stop: venster_sluiten_na_tijd
-            - script.execute:
-                id: zet_status
-                status: !lambda return ink::RUST;
+                      status: !lambda return ink::RUST;
 
 font:
   - file: gfonts://${lettertype}@400
