@@ -44,6 +44,12 @@ int main() {
   auto regels = lees_regels("a\n\nb\r\n");
   assert(regels.size() == 2 && regels[1] == "b");
 
+  auto notities = lees_notities("todo.a|u1|Melk\nlos\ntodo.b|u2|Brood | kaas\ntodo.c|u3|\n");
+  assert(notities.size() == 3);
+  assert(notities[0].lijst == "todo.a" && notities[0].uid == "u1" && notities[0].tekst == "Melk");
+  assert(notities[1].uid.empty() && notities[1].tekst == "los");
+  assert(notities[2].tekst == "Brood | kaas");
+
   // UTF-8
   const std::string s = "café";
   assert(utf8_terug(s, s.size()) == 3);

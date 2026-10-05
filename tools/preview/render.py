@@ -30,7 +30,7 @@ FONT_DEFS = [  # (naam, gewicht, grootte)
     ("kop", 700, 34),
     ("groot", 700, 52),
 ]
-SCENARIOS = ["week", "maand", "luisteren", "voorstel", "melding"]
+SCENARIOS = ["week", "maand", "luisteren", "voorstel", "notitie", "melding"]
 TEKENS = list(range(32, 0x250)) + [0x2013, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026]
 
 
@@ -100,6 +100,8 @@ def teken(opdrachten: list, fonts: dict) -> Image.Image:
                 d.rectangle(vak, fill=o["c"])
             else:
                 d.rectangle(vak, outline=o["c"])
+        elif o["op"] == "line":
+            d.line([o["x"], o["y"], o["x2"], o["y2"]], fill=o["c"])
         elif o["op"] == "circle":
             vak = [o["x"] - o["r"], o["y"] - o["r"], o["x"] + o["r"], o["y"] + o["r"]]
             if o["fill"]:

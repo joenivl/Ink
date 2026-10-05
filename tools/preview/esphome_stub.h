@@ -67,6 +67,9 @@ class Display {
   void rectangle(int x, int y, int w, int h, Color c) {
     std::printf("{\"op\":\"rect\",\"x\":%d,\"y\":%d,\"w\":%d,\"h\":%d,\"c\":%d,\"fill\":0}\n", x, y, w, h, c.r);
   }
+  void line(int x1, int y1, int x2, int y2, Color c) {
+    std::printf("{\"op\":\"line\",\"x\":%d,\"y\":%d,\"x2\":%d,\"y2\":%d,\"c\":%d}\n", x1, y1, x2, y2, c.r);
+  }
   void horizontal_line(int x, int y, int w, Color c) { filled_rectangle(x, y, w, 1, c); }
   void vertical_line(int x, int y, int h, Color c) { filled_rectangle(x, y, 1, h, c); }
   void circle(int x, int y, int r, Color c) {

@@ -1,5 +1,5 @@
 // Previews van het scherm met voorbeelddata.
-// Gebruik: preview <week|maand|luisteren|voorstel|melding>  > opdrachten.jsonl
+// Gebruik: preview <week|maand|luisteren|voorstel|notitie|melding>  > opdrachten.jsonl
 #include <cstring>
 
 #include "../../esphome/ink_kalender.h"
@@ -47,7 +47,13 @@ int main(int argc, char **argv) {
   s.temperatuur = 21.3f;
   s.vochtigheid = 54.0f;
   s.afspraken = ink::lees_afspraken(VOORBEELD);
-  s.notities = ink::lees_regels("Cadeautje Faye\nWeekend kamperen regelen\nBrief naar juf\nBatterijen kopen\n");
+  s.notities = ink::lees_notities(
+      "todo.notities|a1|Cadeautje Faye\n"
+      "todo.notities|a2|Weekend kamperen regelen\n"
+      "todo.notities|a3|Brief naar juf\n"
+      "todo.boodschappen|b1|Batterijen kopen\n"
+      "todo.boodschappen|b2|Melk\n");
+  s.notities[2].afgevinkt = true;
   s.knoppen[0] = {"Woonkamer", true};
   s.knoppen[1] = {"Keuken", false};
   s.knoppen[2] = {"Tuin", false};
@@ -60,7 +66,10 @@ int main(int argc, char **argv) {
   } else if (!std::strcmp(scenario, "voorstel")) {
     s.status = ink::VOORSTEL;
     s.voorstel = {"Verjaardag oma Sylvia", "2026-10-10", "11:00", "13:00",
-                  "zaterdag elf uur verjaardag oma sylvia tot een uur"};
+                  "zaterdag elf uur verjaardag oma sylvia tot een uur", "afspraak"};
+  } else if (!std::strcmp(scenario, "notitie")) {
+    s.status = ink::VOORSTEL;
+    s.voorstel = {"Cadeautje voor Faye kopen", "", "", "", "notitie cadeautje voor faye kopen", "notitie"};
   } else if (!std::strcmp(scenario, "melding")) {
     s.status = ink::MELDING;
     s.melding = "Ik hoorde \"doe de lampen uit\", maar dat is geen afspraak.";

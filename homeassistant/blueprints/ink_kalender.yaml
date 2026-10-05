@@ -2,8 +2,9 @@ blueprint:
   name: Ink kalender
   description: >
     Stuurt agenda's en notities naar de Ink e-paper kalender (reTerminal E1003)
-    en zet ingesproken zinnen om in een afspraak. Het scherm vraagt eerst om
-    bevestiging; pas na 'Opslaan' komt de afspraak in de kalender.
+    en zet ingesproken zinnen om in een afspraak of notitie. Het scherm vraagt
+    eerst om bevestiging; pas na 'Opslaan' komt het in de kalender of takenlijst.
+    Notities die op het scherm worden aangetikt, worden afgevinkt.
 
 
     Vereist: de ESPHome-config esphome/ink-kalender.yaml (apparaatnaam
@@ -28,7 +29,9 @@ blueprint:
             - domain: calendar
     notitielijsten:
       name: Takenlijsten voor 'Notities'
-      description: Open taken uit deze lijsten komen onder 'Notities'. Mag leeg.
+      description: >
+        Open taken uit deze lijsten komen onder 'Notities'. Ingesproken notities
+        komen in de eerste lijst. Mag leeg (dan geen notities).
       default: []
       selector:
         entity:
@@ -82,6 +85,9 @@ triggers:
   - trigger: event
     event_type: esphome.ink_opslaan
     id: opslaan
+  - trigger: event
+    event_type: esphome.ink_afvinken
+    id: afvinken
 
 variables:
   kalenders: !input kalenders
@@ -106,7 +112,8 @@ actions:
           task_name: Ink afspraak
           entity_id: "{{ ai_taak }}"
           instructions: |-
-            Zet een ingesproken Nederlandse zin om in een afspraak voor de gezinskalender.
+            Zet een ingesproken Nederlandse zin om in een afspraak voor de gezinskalender
+            of in een notitie voor de takenlijst.
             Het is nu {{ dagen[now().weekday()] }} {{ now().strftime('%Y-%m-%d %H:%M') }}.
             De komende dagen:
             {%- for i in range(15) %}
@@ -114,30 +121,37 @@ actions:
             - {{ dagen[d.weekday()] }} {{ d.strftime('%Y-%m-%d') }}{{ ' (vandaag)' if i == 0 else ' (morgen)' if i == 1 else '' }}
             {%- endfor %}
 
-            Regels:
+            Soort:
+            - "afspraak": iets op een bepaalde dag (verjaardag, training, tandarts, vakantie).
+            - "notitie": iets om te onthouden of te doen zonder vaste dag (boodschap, klusje,
+              "cadeautje kopen"), of als de zin begint met "notitie" of "zet op de lijst".
+            - "geen": een vraag, een opdracht aan het huis of iets onverstaanbaars.
+
+            Regels voor afspraken:
             - Een losse weekdag ("zaterdag") is de eerstvolgende; vandaag telt alleen als die tijd nog niet voorbij is.
             - "Volgende week <dag>" is die dag in de volgende kalenderweek (weken beginnen op maandag).
             - Tijden in 24-uursnotatie UU:MM. Kies bij "half drie" of "om acht" de logische tijd van de dag.
             - Geen tijd genoemd: begintijd en eindtijd leeg laten (hele dag).
             - Geen eindtijd genoemd: eindtijd leeg laten.
             - Titel: kort, met hoofdletter, zonder datum en tijd. Namen met hoofdletter.
-            - Gaat de zin niet over iets dat in de agenda moet, zet is_afspraak dan op false.
+
+            Bij een notitie: alleen de titel, kort, met hoofdletter, zonder het woord "notitie".
 
             Zin: "{{ tekst }}"
           structure:
-            is_afspraak:
-              description: Is dit een afspraak voor de agenda?
+            soort:
+              description: afspraak, notitie of geen
               required: true
               selector:
-                boolean:
+                select:
+                  options: [afspraak, notitie, geen]
             titel:
-              description: Korte titel van de afspraak
+              description: Korte titel
               required: true
               selector:
                 text:
             datum:
-              description: Datum als JJJJ-MM-DD
-              required: true
+              description: Datum als JJJJ-MM-DD (alleen bij een afspraak)
               selector:
                 text:
             begintijd:
@@ -151,6 +165,8 @@ actions:
         response_variable: ai
       - variables:
           a: "{{ ai.data if ai is defined and ai.data is mapping else {} }}"
+          soort: "{{ a.soort | default('geen') }}"
+          titel: "{{ a.titel | default('') | string | trim }}"
           datum: "{{ a.datum | default('') | string | trim }}"
           datum_geldig: >-
             {{ datum is match('^\d{4}-\d{2}-\d{2}$')
@@ -180,25 +196,48 @@ actions:
             data:
               tekst: De AI-taak werkte niet. Kijk in Home Assistant bij Instellingen > Systeem > Logboeken.
         else:
-          - if:
-              - condition: template
-                value_template: >-
-                  {{ a.is_afspraak | default(false) | bool(false)
-                     and datum_geldig and (a.titel | default('') | trim) != '' }}
-            then:
-              - action: esphome.ink_kalender_toon_voorstel
-                continue_on_error: true
-                data:
-                  titel: "{{ a.titel | trim }}"
-                  datum: "{{ datum }}"
-                  begin: "{{ begin | trim }}"
-                  eind: "{{ eind | trim }}"
-                  gehoord: "{{ tekst }}"
-            else:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ soort == 'afspraak' and datum_geldig and titel != '' }}"
+                sequence:
+                  - action: esphome.ink_kalender_toon_voorstel
+                    continue_on_error: true
+                    data:
+                      titel: "{{ titel }}"
+                      datum: "{{ datum }}"
+                      begin: "{{ begin | trim }}"
+                      eind: "{{ eind | trim }}"
+                      gehoord: "{{ tekst }}"
+                      soort: afspraak
+              - conditions:
+                  - condition: template
+                    value_template: "{{ soort == 'notitie' and titel != '' and notitielijsten | count > 0 }}"
+                sequence:
+                  - action: esphome.ink_kalender_toon_voorstel
+                    continue_on_error: true
+                    data:
+                      titel: "{{ titel }}"
+                      datum: ""
+                      begin: ""
+                      eind: ""
+                      gehoord: "{{ tekst }}"
+                      soort: notitie
+              - conditions:
+                  - condition: template
+                    value_template: "{{ soort == 'notitie' and notitielijsten | count == 0 }}"
+                sequence:
+                  - action: esphome.ink_kalender_toon_melding
+                    continue_on_error: true
+                    data:
+                      tekst: >-
+                        Dat is een notitie, maar er is nog geen takenlijst gekozen in de
+                        Ink-automatisering.
+            default:
               - action: esphome.ink_kalender_toon_melding
                 continue_on_error: true
                 data:
-                  tekst: Ik hoorde "{{ tekst }}", maar kon daar geen afspraak van maken.
+                  tekst: Ik hoorde "{{ tekst }}", maar kon daar geen afspraak of notitie van maken.
       - stop: Spraak verwerkt
 
   # ------------------------------------------------ bevestigd -> kalender in
@@ -210,7 +249,16 @@ actions:
           d: "{{ trigger.event.data }}"
       - if:
           - condition: template
-            value_template: "{{ (d.begin | default('')) == '' }}"
+            value_template: "{{ (d.soort | default('') or 'afspraak') == 'notitie' }}"
+        then:
+          - action: todo.add_item
+            target:
+              entity_id: "{{ notitielijsten[0] }}"
+            data:
+              item: "{{ d.titel }}"
+      - if:
+          - condition: template
+            value_template: "{{ (d.soort | default('') or 'afspraak') == 'afspraak' and (d.begin | default('')) == '' }}"
         then:
           - action: calendar.create_event
             target:
@@ -219,7 +267,10 @@ actions:
               summary: "{{ d.titel }}"
               start_date: "{{ d.datum }}"
               end_date: "{{ (strptime(d.datum, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d') }}"
-        else:
+      - if:
+          - condition: template
+            value_template: "{{ (d.soort | default('') or 'afspraak') == 'afspraak' and (d.begin | default('')) != '' }}"
+        then:
           - action: calendar.create_event
             target:
               entity_id: "{{ doel_kalender }}"
@@ -235,6 +286,19 @@ actions:
                   {% set e = s + timedelta(minutes=standaard_duur | int) %}
                 {% endif %}
                 {{ e.strftime('%Y-%m-%d %H:%M:%S') }}
+
+  # ------------------------------------------------ notitie afgevinkt op het scherm
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id == 'afvinken' }}"
+    then:
+      - action: todo.update_item
+        continue_on_error: true
+        target:
+          entity_id: "{{ trigger.event.data.lijst }}"
+        data:
+          item: "{{ trigger.event.data.uid }}"
+          status: completed
 
   # ------------------------------------------------ agenda naar het scherm
   # Het scherm ververst alleen als er echt iets veranderd is.
@@ -290,7 +354,7 @@ actions:
             {%- set ns = namespace(r=[]) -%}
             {%- for lijst, data in taken.items() -%}
               {%- for t in data['items'] -%}
-                {%- set ns.r = ns.r + [t.summary | replace('\n', ' ') | trim] -%}
+                {%- set ns.r = ns.r + [lijst ~ '|' ~ t.uid ~ '|' ~ (t.summary | replace('\n', ' ') | trim)] -%}
               {%- endfor -%}
             {%- endfor -%}
             {{- ns.r | join('\n') -}}

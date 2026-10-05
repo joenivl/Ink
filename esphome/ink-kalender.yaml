@@ -2,7 +2,8 @@
 #
 # - twee schermen (tabs bovenin): week met notities, en maand
 # - knoppen om Home Assistant te bedienen
-# - afspraken inspreken via de ingebouwde microfoon
+# - afspraken en notities inspreken via de ingebouwde microfoon
+# - notities afvinken door erop te tikken
 #
 # Hoort bij de blueprint homeassistant/blueprints/ink_kalender.yaml.
 # Installatie: zie README.md.
@@ -94,7 +95,7 @@ api:
               s.ruw_afspraken = afspraken;
               s.ruw_notities = notities;
               s.afspraken = ink::lees_afspraken(afspraken);
-              s.notities = ink::lees_regels(notities);
+              s.notities = ink::lees_notities(notities);
               s.data_ontvangen = true;
             }
             if (nieuw || id(wacht_op_agenda)) {
@@ -109,10 +110,11 @@ api:
         begin: string
         eind: string
         gehoord: string
+        soort: string
       then:
         - lambda: |-
             auto &s = ink::staat();
-            s.voorstel = {titel, datum, begin, eind, gehoord};
+            s.voorstel = {titel, datum, begin, eind, gehoord, soort};
             s.status = ink::VOORSTEL;
             ink::ververs_mask() |= ink::VENSTER | ink::BALK;
         - script.execute: ververs
@@ -540,6 +542,22 @@ script:
                     static const char *const entiteiten[] = {
                         "${knop1_entiteit}", "${knop2_entiteit}", "${knop3_entiteit}", "${knop4_entiteit}"};
                     return std::string(entiteiten[zone - ink::KNOP1]);
+      # Notitie afvinken (meteen doorgestreept; HA haalt hem daarna weg)
+      - if:
+          condition:
+            lambda: |-
+              const int i = zone - ink::NOTITIE0;
+              return i >= 0 && i < (int) ink::staat().notities.size() && !ink::staat().notities[i].afgevinkt;
+          then:
+            - homeassistant.event:
+                event: esphome.ink_afvinken
+                data:
+                  lijst: !lambda return ink::staat().notities[zone - ink::NOTITIE0].lijst;
+                  uid: !lambda return ink::staat().notities[zone - ink::NOTITIE0].uid;
+            - lambda: |-
+                ink::staat().notities[zone - ink::NOTITIE0].afgevinkt = true;
+                ink::ververs_mask() |= ink::NOTITIES;
+            - script.execute: ververs
       # Voorstel opslaan
       - if:
           condition:
@@ -552,6 +570,7 @@ script:
                   datum: !lambda return ink::staat().voorstel.datum;
                   begin: !lambda return ink::staat().voorstel.begin;
                   eind: !lambda return ink::staat().voorstel.eind;
+                  soort: !lambda return ink::staat().voorstel.soort;
             - script.stop: venster_sluiten_na_tijd
             - lambda: |-
                 ink::staat().status = ink::RUST;

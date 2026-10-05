@@ -78,6 +78,7 @@ constexpr int VENSTER_KNOP_Y = VENSTER_Y + VENSTER_H - 144;
 constexpr uint8_t VOL = 1;      // alles, GC16 (mooi grijs, knippert)
 constexpr uint8_t BALK = 2;     // alleen knoppenbalk, DU (snel)
 constexpr uint8_t VENSTER = 4;  // alleen pop-upvenster, DU (snel)
+constexpr uint8_t NOTITIES = 8; // alleen notitievakken, DU (snel)
 
 const Color ZWART(0, 0, 0);
 const Color WIT(255, 255, 255);
@@ -207,6 +208,34 @@ inline std::vector<std::string> lees_regels(const std::string &tekst) {
   return uit;
 }
 
+struct Notitie {
+  std::string lijst;  // todo-entiteit, bijv. "todo.notities"
+  std::string uid;    // id van het item in die lijst
+  std::string tekst;
+  bool afgevinkt{false};
+};
+
+// Regels "todo.lijst|uid|tekst". Een regel zonder '|' is alleen tekst
+// (dan kan hij niet afgevinkt worden).
+inline std::vector<Notitie> lees_notities(const std::string &tekst) {
+  std::vector<Notitie> uit;
+  for (const auto &regel : lees_regels(tekst)) {
+    Notitie n;
+    const size_t a = regel.find('|');
+    const size_t b = a == std::string::npos ? a : regel.find('|', a + 1);
+    if (b == std::string::npos) {
+      n.tekst = regel;
+    } else {
+      n.lijst = regel.substr(0, a);
+      n.uid = regel.substr(a + 1, b - a - 1);
+      n.tekst = regel.substr(b + 1);
+    }
+    if (!n.tekst.empty())
+      uit.push_back(n);
+  }
+  return uit;
+}
+
 // ------------------------------------------------------------------ staat ---
 
 enum Status : uint8_t { RUST, LUISTEREN, VERWERKEN, VOORSTEL, MELDING };
@@ -220,12 +249,14 @@ enum Zone : int {
   OK = 12,
   TAB_WEEK = 20,
   TAB_MAAND = 21,
+  NOTITIE0 = 100,  // NOTITIE0 + i = notitie i
 };
 
 enum Scherm : uint8_t { SCHERM_WEEK, SCHERM_MAAND };
 
 struct Voorstel {
   std::string titel, datum, begin, eind, gehoord;
+  std::string soort;  // "afspraak" of "notitie"
 };
 
 struct HaKnop {
@@ -240,7 +271,7 @@ struct Staat {
   bool verbonden{true};
   std::string ruw_afspraken, ruw_notities;
   std::vector<Afspraak> afspraken;
-  std::vector<std::string> notities;
+  std::vector<Notitie> notities;
   Status status{RUST};
   Scherm scherm{SCHERM_WEEK};
   Voorstel voorstel;
@@ -560,36 +591,54 @@ inline void teken_maand(Display &it, const Staat &s, const Fonts &f) {
   }
 }
 
+constexpr int NOTITIE_REGEL = 40;
+constexpr int NOTITIE_KOLOMMEN = 3;
+constexpr int NOTITIE_TUSSEN = 30;
+constexpr int NOTITIE_TOP = NOTITIE_Y + 42;
+constexpr int NOTITIE_KOL_B = (BREED - (NOTITIE_KOLOMMEN - 1) * NOTITIE_TUSSEN) / NOTITIE_KOLOMMEN;
+constexpr int NOTITIE_PER_KOLOM = (NOTITIE_EIND - NOTITIE_TOP) / NOTITIE_REGEL;
+constexpr int NOTITIE_MAX = NOTITIE_PER_KOLOM * NOTITIE_KOLOMMEN;
+
+inline int notitie_x(int i) { return MARGE + (i / NOTITIE_PER_KOLOM) * (NOTITIE_KOL_B + NOTITIE_TUSSEN); }
+inline int notitie_y(int i) { return NOTITIE_TOP + (i % NOTITIE_PER_KOLOM) * NOTITIE_REGEL; }
+
 inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
   tekst(it, MARGE, NOTITIE_Y - 8, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, "Notities");
-  constexpr int REGEL = 40;
-  constexpr int KOLOMMEN = 3;
-  constexpr int TUSSEN = 30;
-  const int top = NOTITIE_Y + 42;
-  const int kol_b = (BREED - (KOLOMMEN - 1) * TUSSEN) / KOLOMMEN;
-  const int per_kolom = (NOTITIE_EIND - top) / REGEL;
-  for (int k = 0; k < KOLOMMEN; k++) {
-    const int x = MARGE + k * (kol_b + TUSSEN);
-    it.filled_rectangle(x, top, kol_b, 2, ZWART);
-    for (int r = 1; r <= per_kolom; r++)
-      it.horizontal_line(x, top + r * REGEL, kol_b, GRIJS);
+  tekst(it, MARGE + breedte(it, f.kop, "Notities") + 24, NOTITIE_Y + 2, f.klein, GRIJS_DONKER, WIT,
+        TextAlign::TOP_LEFT, "tik op een notitie om af te vinken");
+  for (int k = 0; k < NOTITIE_KOLOMMEN; k++) {
+    const int x = MARGE + k * (NOTITIE_KOL_B + NOTITIE_TUSSEN);
+    it.filled_rectangle(x, NOTITIE_TOP, NOTITIE_KOL_B, 2, ZWART);
+    for (int r = 1; r <= NOTITIE_PER_KOLOM; r++)
+      it.horizontal_line(x, NOTITIE_TOP + r * NOTITIE_REGEL, NOTITIE_KOL_B, GRIJS);
   }
   if (s.notities.empty()) {
-    tekst(it, MARGE + 8, top + 2, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Geen notities");
+    tekst(it, MARGE + 8, NOTITIE_TOP + 2, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Geen notities");
     return;
   }
-  const int max = per_kolom * KOLOMMEN;
-  for (int i = 0; i < static_cast<int>(s.notities.size()) && i < max; i++) {
-    const int x = MARGE + (i / per_kolom) * (kol_b + TUSSEN);
-    const int y = top + (i % per_kolom) * REGEL;
-    std::string t = s.notities[i];
-    if (i == max - 1 && static_cast<int>(s.notities.size()) > max) {
+  const int aantal = static_cast<int>(s.notities.size());
+  for (int i = 0; i < aantal && i < NOTITIE_MAX; i++) {
+    const int x = notitie_x(i);
+    const int y = notitie_y(i);
+    if (i == NOTITIE_MAX - 1 && aantal > NOTITIE_MAX) {
       char buf[24];
-      std::snprintf(buf, sizeof(buf), "+%d meer", static_cast<int>(s.notities.size()) - i);
-      t = buf;
+      std::snprintf(buf, sizeof(buf), "+%d meer", aantal - i);
+      tekst(it, x + 36, y + 2, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, buf);
+      break;
     }
-    it.filled_circle(x + 12, y + 22, 5, ZWART);
-    tekst(it, x + 28, y + 2, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, afkappen(it, f.normaal, t, kol_b - 36));
+    const Notitie &n = s.notities[i];
+    // Vakje om af te vinken
+    kader(it, x + 4, y + 10, 22, 22, 2, n.uid.empty() ? GRIJS : ZWART);
+    if (n.afgevinkt) {
+      for (int d = -1; d <= 1; d++) {
+        it.line(x + 8, y + 20 + d, x + 14, y + 27 + d, ZWART);
+        it.line(x + 14, y + 27 + d, x + 30, y + 6 + d, ZWART);
+      }
+    }
+    const std::string t = afkappen(it, f.normaal, n.tekst, NOTITIE_KOL_B - 44);
+    tekst(it, x + 36, y + 2, f.normaal, n.afgevinkt ? GRIJS_DONKER : ZWART, WIT, TextAlign::TOP_LEFT, t);
+    if (n.afgevinkt)
+      it.filled_rectangle(x + 34, y + 22, breedte(it, f.normaal, t) + 4, 2, GRIJS_DONKER);
   }
 }
 
@@ -611,8 +660,8 @@ inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
   it.horizontal_line(MARGE, BALK_Y, BREED, ZWART);
 
   // Spreekknop
-  std::string label = "Afspraak inspreken";
-  std::string hint = "tik en zeg wat en wanneer";
+  std::string label = "Inspreken";
+  std::string hint = "een afspraak of een notitie";
   const bool actief = s.status == LUISTEREN || s.status == VERWERKEN;
   if (s.status == LUISTEREN) {
     label = "Ik luister…";
@@ -679,20 +728,26 @@ inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
   }
 
   const Voorstel &v = s.voorstel;
-  tekst(it, x, y, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Nieuwe afspraak toevoegen?");
+  const bool notitie = v.soort == "notitie";
+  tekst(it, x, y, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT,
+        notitie ? "Notitie toevoegen?" : "Nieuwe afspraak toevoegen?");
   y += 46;
   for (const auto &r : omloop(it, f.groot, v.titel, w, w, 2)) {
     tekst(it, x, y, f.groot, ZWART, WIT, TextAlign::TOP_LEFT, r);
     y += 66;
   }
   y += 4;
-  Datum d;
-  std::string wanneer = lees_datum(v.datum, d) ? datum_lang(d) : v.datum;
-  if (v.begin.empty())
-    wanneer += "  ·  hele dag";
-  else
-    wanneer += "  ·  " + v.begin + (v.eind.empty() ? "" : " – " + v.eind);
-  tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, afkappen(it, f.kop, wanneer, w));
+  if (!notitie) {
+    Datum d;
+    std::string wanneer = lees_datum(v.datum, d) ? datum_lang(d) : v.datum;
+    if (v.begin.empty())
+      wanneer += "  ·  hele dag";
+    else
+      wanneer += "  ·  " + v.begin + (v.eind.empty() ? "" : " – " + v.eind);
+    tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, afkappen(it, f.kop, wanneer, w));
+  } else {
+    tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, "op de notitielijst");
+  }
   y += 54;
   if (!v.gehoord.empty())
     tekst(it, x, y, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT,
@@ -724,6 +779,13 @@ inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
   }
   if (mask & BALK)
     teken_balk(it, s, f);
+  if ((mask & NOTITIES) && s.scherm == SCHERM_WEEK) {
+    it.filled_rectangle(0, NOTITIE_Y - 12, B, NOTITIE_EIND - NOTITIE_Y + 14, WIT);
+    teken_notities(it, s, f);
+    // Een open venster mag er niet door overschreven worden.
+    if (venster_open(s))
+      teken_venster(it, s, f);
+  }
   if ((mask & VENSTER) && venster_open(s))
     teken_venster(it, s, f);
 }
@@ -743,9 +805,19 @@ inline Zone raak(const Staat &s, int x, int y) {
     if (binnen(x, y, annuleer_x(), VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H))
       return ANNULEER;
   }
-  for (int i = 0; i < 2; i++)
+  // Tabs en notities liggen onder een open venster; dan niet aanraakbaar.
+  for (int i = 0; i < 2 && !venster_open(s); i++)
     if (binnen(x, y, tab_x(i), 0, TAB_B, KOP_H))
       return static_cast<Zone>(TAB_WEEK + i);
+  if (s.scherm == SCHERM_WEEK && !venster_open(s)) {
+    const int aantal = static_cast<int>(s.notities.size());
+    for (int i = 0; i < aantal && i < NOTITIE_MAX; i++) {
+      if (i == NOTITIE_MAX - 1 && aantal > NOTITIE_MAX)
+        break;  // "+N meer"
+      if (binnen(x, y, notitie_x(i), notitie_y(i), NOTITIE_KOL_B, NOTITIE_REGEL))
+        return s.notities[i].uid.empty() ? GEEN : static_cast<Zone>(NOTITIE0 + i);
+    }
+  }
   // Iets ruimere vlakken in de balk; vingers zijn geen stylus.
   if (binnen(x, y, MARGE - 10, KNOP_Y - 14, SPREEK_B + 18, KNOP_H + 28))
     return SPREEK;
