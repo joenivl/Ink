@@ -1019,8 +1019,16 @@ font:
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-    # Iconen in titels (zwart-wit emoji). Alleen deze worden getekend, de rest
-    # haalt de firmware weg; houd de lijst gelijk aan ICONEN in ink_kalender.h.
+  - file: gfonts://${lettertype}@400
+    id: f_normaal
+    size: 26
+    bpp: 4
+    glyphsets: [GF_Latin_Core]
+    ignore_missing_glyphs: true
+    # Iconen in titels en notities (zwart-wit emoji), alleen in dit font: alle
+    # titels en notities staan in f_normaal, en meer past niet in de app-partitie.
+    # Andere emoji haalt de firmware weg; houd de lijst gelijk aan ICONEN in
+    # ink_kalender.h.
     extras: &iconen
       - file:
           type: gfonts
@@ -1038,34 +1046,24 @@ font:
           "🛁", "🛏", "🛒", "🤒", "🤸", "🥂", "🥚", "🥳", "🦷", "🧒", "🧘", "🧩", "🧳", "🧸", "🧹", "🧺",
           "🩰", "🩺", "🪁", "🪴"
         ]
-  - file: gfonts://${lettertype}@400
-    id: f_normaal
-    size: 26
-    bpp: 4
-    glyphsets: [GF_Latin_Core]
-    ignore_missing_glyphs: true
-    extras: *iconen
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_vet
     size: 26
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-    extras: *iconen
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_kop
     size: 34
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-    extras: *iconen
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_groot
     size: 52
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-    extras: *iconen
 
 display:
   - platform: it8951

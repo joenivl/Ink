@@ -162,7 +162,8 @@ inline std::string datum_lang(const Datum &dt) {
 
 // ---------------------------------------------------------------- iconen ---
 
-// Emoji die in de fonts zitten (Noto Emoji, via 'extras' in ink-kalender.yaml).
+// Emoji die in f_normaal zitten (Noto Emoji, via 'extras' in ink-kalender.yaml);
+// daarin staan alle titels en notities.
 // Moet gelijk zijn aan die lijst; tools/preview/render.py controleert dat.
 // Gesorteerd, voor binary_search.
 static const uint32_t ICONEN[] = {
