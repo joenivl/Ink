@@ -316,7 +316,11 @@ actions:
   - variables:
       # Per regel "JJJJ-MM-DD|UU:MM|titel"; hele-dag-afspraken krijgen '-' als
       # tijd (en staan zo na sorteren vooraan) en komen op elke dag die ze duren.
+      # Een afspraak met tijd over meerdere dagen staat op de begindag met de
+      # begintijd en op de dagen erna als hele-dag-balk. Alleen dagen in het
+      # rooster (42 dagen vanaf grid_start) worden meegestuurd.
       afspraken_tekst: >-
+        {%- set g0 = strptime(grid_start, '%Y-%m-%d').date() -%}
         {%- set ns = namespace(r=[]) -%}
         {%- for kal, data in agenda.items() -%}
           {%- set naam = state_attr(kal, 'friendly_name') or kal -%}
@@ -325,14 +329,18 @@ actions:
             {%- if kalendernaam_tonen -%}{%- set titel = naam ~ ': ' ~ titel -%}{%- endif -%}
             {%- if 'T' in e.start -%}
               {%- set s = as_local(as_datetime(e.start)) -%}
-              {%- set ns.r = ns.r + [s.strftime('%Y-%m-%d') ~ '|' ~ s.strftime('%H:%M') ~ '|' ~ titel] -%}
+              {%- set t = as_local(as_datetime(e.end | default(e.start))) -%}
+              {%- set d0 = s.date() -%}
+              {%- set n = [((t - timedelta(seconds=1)).date() - d0).days + 1, 1] | max -%}
+              {%- set tijd = s.strftime('%H:%M') -%}
             {%- else -%}
-              {%- set s = strptime(e.start, '%Y-%m-%d') -%}
-              {%- set n = [(strptime(e.end, '%Y-%m-%d') - s).days, 1] | max -%}
-              {%- for i in range(n) -%}
-                {%- set ns.r = ns.r + [(s + timedelta(days=i)).strftime('%Y-%m-%d') ~ '|-|' ~ titel] -%}
-              {%- endfor -%}
+              {%- set d0 = strptime(e.start, '%Y-%m-%d').date() -%}
+              {%- set n = [(strptime(e.end, '%Y-%m-%d').date() - d0).days, 1] | max -%}
+              {%- set tijd = '-' -%}
             {%- endif -%}
+            {%- for i in range([(g0 - d0).days, 0] | max, [n, (g0 - d0).days + 42] | min) -%}
+              {%- set ns.r = ns.r + [(d0 + timedelta(days=i)).strftime('%Y-%m-%d') ~ '|' ~ (tijd if i == 0 else '-') ~ '|' ~ titel] -%}
+            {%- endfor -%}
           {%- endfor -%}
         {%- endfor -%}
         {{- ns.r | sort | join('\n') -}}

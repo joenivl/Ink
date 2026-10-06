@@ -41,6 +41,18 @@ int main() {
   assert(lijst[3].titel == "Titel met | streep");
   assert(lees_afspraken("").empty());
 
+  // Iconen: bekende blijven, onbekende en emoji-hulptekens gaan weg
+  assert(is_icoon(0x1F382) && is_icoon(0x23F0) && !is_icoon(0x1F1F3));
+  assert(zonder_onbekende_iconen("🎂 Elise jarig") == "🎂 Elise jarig");
+  assert(zonder_onbekende_iconen("✈️ Vakantie") == "✈ Vakantie");               // variatiekiezer FE0F
+  assert(zonder_onbekende_iconen("🇳🇱 Koningsdag 🦄") == "Koningsdag");          // vlag, onbekend icoon
+  assert(zonder_onbekende_iconen("👍🏽 Ok") == "👍 Ok");                          // huidskleur
+  assert(zonder_onbekende_iconen("👨‍👩‍👧 Uitje") == "👨👩👧 Uitje");              // ZWJ-reeks
+  assert(zonder_onbekende_iconen("Café – “thee” …") == "Café – “thee” …");
+  assert(zonder_onbekende_iconen("kapot \xF0\x9F") == "kapot");                // afgebroken UTF-8
+  assert(lees_afspraken("2026-10-05|-|🎉🎉 Feest ✨")[0].titel == "🎉🎉 Feest ✨");
+  assert(lees_notities("todo.a|u1|🛒 Melk 🥛")[0].tekst == "🛒 Melk");
+
   auto regels = lees_regels("a\n\nb\r\n");
   assert(regels.size() == 2 && regels[1] == "b");
 

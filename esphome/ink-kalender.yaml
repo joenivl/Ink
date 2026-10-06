@@ -1025,6 +1025,27 @@ font:
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
+    # Iconen in titels en notities (zwart-wit emoji), alleen in dit font: alle
+    # titels en notities staan in f_normaal, en meer past niet in de app-partitie.
+    # Andere emoji haalt de firmware weg; houd de lijst gelijk aan ICONEN in
+    # ink_kalender.h.
+    extras: &iconen
+      - file:
+          type: gfonts
+          family: Noto Emoji
+          weight: 400
+        glyphs: [
+          "⏰", "☀", "☕", "♻", "⚠", "⚽", "⛄", "⛳", "⛺", "✂", "✅", "✈", "✏", "✔", "✨", "❄",
+          "❌", "❓", "❗", "❤", "⭐", "🌈", "🌍", "🌙", "🌟", "🌧", "🌱", "🌷", "🌻", "🍕", "🍰", "🍴",
+          "🍷", "🍺", "🍽", "🎁", "🎂", "🎃", "🎄", "🎅", "🎈", "🎉", "🎓", "🎟", "🎤", "🎨", "🎫", "🎬",
+          "🎭", "🎮", "🎯", "🎵", "🎶", "🎸", "🎹", "🎾", "🎿", "🏀", "🏃", "🏆", "🏊", "🏋", "🏔", "🏖",
+          "🏠", "🏡", "🏥", "🏫", "🐈", "🐕", "🐣", "🐰", "🐱", "🐴", "🐶", "🐾", "👋", "👍", "👏", "👓",
+          "👦", "👧", "👨", "👩", "👪", "👴", "👵", "👶", "👻", "💇", "💉", "💊", "💍", "💕", "💡", "💪",
+          "💰", "💶", "💻", "💼", "📅", "📆", "📌", "📖", "📚", "📝", "📞", "📧", "📷", "📺", "🔔", "🔥",
+          "🔧", "🔨", "🕯", "🗑", "😀", "😊", "😍", "😎", "😴", "🙏", "🚆", "🚌", "🚗", "🚢", "🚲", "🚴",
+          "🛁", "🛏", "🛒", "🤒", "🤸", "🥂", "🥚", "🥳", "🦷", "🧒", "🧘", "🧩", "🧳", "🧸", "🧹", "🧺",
+          "🩰", "🩺", "🪁", "🪴"
+        ]
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_vet
     size: 26

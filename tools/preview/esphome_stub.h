@@ -40,7 +40,7 @@ inline int stub_tekstbreedte(const BaseFont *f, const char *s) {
       cp = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
       p += 3;
     } else {
-      cp = '?';
+      cp = ((p[0] & 0x07) << 18) | ((p[1] & 0x3F) << 12) | ((p[2] & 0x3F) << 6) | (p[3] & 0x3F);
       p += 4;
     }
     w += metrics::breedte(f->index, cp);

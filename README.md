@@ -9,6 +9,10 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
   - **Maand**: het hele maandrooster. Na 5 minuten springt het scherm vanzelf terug
     naar de week.
 - **Handschrift-look**: lettertype Kalam.
+- **Iconen in titels**: een emoji in een afspraak of notitie ("🎂 Elise jarig") komt als
+  zwart-wit icoon op het scherm. Er zitten ongeveer 150 veelgebruikte iconen in (alleen in het font van titels en notities, meer past niet in het geheugen) (verjaardag,
+  sport, school, dokter, reizen, feestdagen…); andere emoji worden weggelaten. De lijst
+  staat bij `font:` in `ink-kalender.yaml` en als `ICONEN` in `ink_kalender.h`.
 - **Knoppen**: vier knoppen om lampen, scripts en dergelijke in HA aan of uit te zetten.
 - **Inspreken** (alleen via de knop, geen wake word): tik op de knop en zeg bijvoorbeeld
   "zaterdag half drie verjaardag oma" (afspraak) of "notitie cadeautje voor Faye" (notitie).
