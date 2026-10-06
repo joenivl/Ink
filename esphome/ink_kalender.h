@@ -939,6 +939,9 @@ inline uint32_t slaapduur_ms(int uur, int minuut, int elke_min, int nacht_van, i
 static RTC_DATA_ATTR uint32_t rtc_inhoud_hash = 0;
 static RTC_DATA_ATTR time_t rtc_slaap_begin = 0;
 static RTC_DATA_ATTR uint8_t rtc_snelle_touch_wekkers = 0;
+// Laatst gemeten accupercentage, zodat het na het wekken meteen weer op het
+// scherm staat (de eerste meting volgt pas een paar seconden later).
+static RTC_DATA_ATTR float rtc_accu = NAN;
 
 enum Wekreden : int { WEK_STROOM = 0, WEK_TIMER = 1, WEK_GEBRUIKER = 2 };
 
