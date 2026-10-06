@@ -27,6 +27,13 @@ substitutions:
   lettertype_vet: "700"
   nep_vet: "false"
 
+  # Microfoon. Verkeerd verstaan of een andere taal herkend? Eerst
+  # mic_versterking omhoog (1-64; 4 = 4x zo luid). Klinkt het vervormd
+  # (woorden verhaspeld bij luid praten), dan juist omlaag.
+  mic_versterking: "4"
+  mic_ruisonderdrukking: "2"  # 0 (uit) tot 4 (sterk)
+  mic_auto_gain: 31dBFS       # 0dBFS = uit, 31dBFS = maximaal
+
   # Na zoveel tijd op het maandscherm terug naar de week.
   terug_naar_week_na: 5min
 
@@ -462,10 +469,15 @@ microphone:
     adc_type: external
     pdm: true
     i2s_din_pin: GPIO41
+    correct_dc_offset: true
 
 voice_assistant:
   id: spraak
-  microphone: mic
+  microphone:
+    microphone: mic
+    gain_factor: ${mic_versterking}
+  noise_suppression_level: ${mic_ruisonderdrukking}
+  auto_gain: ${mic_auto_gain}
   on_listening:
     - script.execute:
         id: zet_status

@@ -150,7 +150,12 @@ Hangt het scherm andersom (beeld op z'n kop)? Zet `rotatie: "180"` en beide
 **Inspreken doet niets.** Controleer stap 3.2 en 3.3 en kijk of de automatisering
 draait (Instellingen → Automatiseringen → *Ink kalender* → Traces).
 
-**Microfoon te zacht.** Voeg onder `voice_assistant:` bijvoorbeeld `volume_multiplier: 3.0` toe.
+**Verkeerd verstaan, of herkend als een andere taal.** Controleer eerst dat de
+spraak-naar-tekst van de assistent op **Nederlands** staat (niet Fries of automatisch).
+Is de microfoon te zacht, zet dan `mic_versterking` bovenin `ink-kalender.yaml`
+hoger (bijvoorbeeld 8). Worden woorden juist verhaspeld bij luid praten, dan
+lager. Wat HA verstaan heeft, zie je via Instellingen → Spraakassistenten →
+*Ink* → ⋮ → *Debug*.
 
 **"Geen verbinding" bovenaan.** Het scherm heeft vijf minuten geen contact met HA gehad.
 
