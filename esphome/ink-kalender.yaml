@@ -86,6 +86,8 @@ esphome:
             ink::na_wakker_worden();
             id(wekreden) = ink::wekreden();
             auto &s = ink::staat();
+            if (id(wekreden) != ink::WEK_STROOM)
+              s.accu = ink::rtc_accu;
             if (id(wekreden) == ink::WEK_TIMER) {
               s.slaap = ink::SLAAPT;  // stille ronde
             } else if (id(wekreden) == ink::WEK_GEBRUIKER) {
@@ -316,6 +318,10 @@ sensor:
           window_size: 5
           send_every: 5
           send_first_at: 1
+    # Meteen het percentage bijwerken: de eerste meting komt direct na het
+    # opstarten, ook na het wekken (anders bleef de accu een tijd leeg).
+    on_value:
+      - component.update: accu
   - platform: template
     id: accu
     name: Accu
@@ -323,7 +329,7 @@ sensor:
     device_class: battery
     state_class: measurement
     accuracy_decimals: 0
-    update_interval: 5min
+    update_interval: never
     lambda: |-
       if (std::isnan(id(accuspanning).state))
         return {};  // nog geen meting
@@ -814,6 +820,7 @@ script:
             - delay: 6s
             - lambda: |-
                 ink::rtc_inhoud_hash = ink::inhoud_hash(ink::staat());
+                ink::rtc_accu = ink::staat().accu;
                 ink::bereid_slaap_voor(${touch_wekt}, id(i2c_bus), id(touch)->get_i2c_address());
             - deep_sleep.enter:
                 id: slaap
