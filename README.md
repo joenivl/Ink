@@ -216,11 +216,14 @@ echte waarde na een paar dagen in de geschiedenis van *Accu*.
   volgende ronde.
 - **Firmware-update:** maak het scherm eerst wakker met een tik en zet binnen een
   minuut in HA de **Spaarstand** uit. Na de update zet je hem weer aan.
-- **Touch-wekken:** dat de touch-chip het scherm kan wekken, heb ik afgeleid uit de
-  schema's; op het apparaat is het nog niet getest. Wordt het scherm steeds meteen
-  weer wakker, dan schakelt Ink touch-wekken na drie keer zelf uit. Vanaf dan wek je
-  het met de knoppen, tot je een keer met een knop wekt. Werkt touch-wekken helemaal
-  niet, zet dan `touch_wekt: "false"`.
+- **Touch-wekken:** werkt zoals in Seeeds eigen SenseCraft-firmware: vlak voor het
+  slapen gaat de touch-chip in "gebarenmodus" en wekt hij het scherm via een
+  aparte wekpin (ext0). Reageert een gewone tik niet, probeer dan een **dubbeltik**:
+  welk gebaar de chip in die modus herkent, is niet gedocumenteerd. Wordt het
+  scherm steeds meteen weer wakker, dan schakelt Ink touch-wekken na drie keer zelf
+  uit tot je een keer met een knop wekt. Werkt het helemaal niet, zet dan
+  `touch_wekt: "false"`; dan gaat bovendien alles tijdens de slaap helemaal uit
+  (zuiniger).
 - **Aan de stroom:** hangt hij aan USB-C, zet dan de spaarstand gewoon uit voor een
   scherm dat altijd direct reageert.
 

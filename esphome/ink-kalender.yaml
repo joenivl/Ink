@@ -744,7 +744,7 @@ script:
             - delay: 6s
             - lambda: |-
                 ink::rtc_inhoud_hash = ink::inhoud_hash(ink::staat());
-                ink::bereid_slaap_voor(${touch_wekt});
+                ink::bereid_slaap_voor(${touch_wekt}, id(i2c_bus), id(touch)->get_i2c_address());
             - deep_sleep.enter:
                 id: slaap
                 sleep_duration: !lambda |-

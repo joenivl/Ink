@@ -945,15 +945,25 @@ enum Wekreden : int { WEK_STROOM = 0, WEK_TIMER = 1, WEK_GEBRUIKER = 2 };
 constexpr gpio_num_t PIN_TOUCH_INT = GPIO_NUM_2;
 constexpr gpio_num_t PIN_KNOP_GROEN = GPIO_NUM_3;
 constexpr gpio_num_t KNOPPEN[] = {GPIO_NUM_3, GPIO_NUM_4, GPIO_NUM_5};
-// Uitgangen die tijdens de slaap laag moeten blijven (zie README, Spaarstand)
-constexpr gpio_num_t UIT_IN_SLAAP[] = {GPIO_NUM_11, GPIO_NUM_21, GPIO_NUM_38, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_45};
+// Uitgangen die tijdens de slaap laag moeten (zie README, Spaarstand).
+// RTC-pinnen (<= GPIO21) kunnen los vastgezet worden ...
+constexpr gpio_num_t UIT_IN_SLAAP_RTC[] = {GPIO_NUM_11, GPIO_NUM_21};
+// ... de rest alleen met gpio_deep_sleep_hold_en(), en dat breekt ext0 (touch-wekken).
+constexpr gpio_num_t UIT_IN_SLAAP_DIGITAAL[] = {GPIO_NUM_38, GPIO_NUM_39, GPIO_NUM_40, GPIO_NUM_45};
 constexpr gpio_num_t PIN_TOUCH_RESET = GPIO_NUM_48;
+
+// GT911-registers voor de gebarenmodus (zoals Seeeds eigen SenseCraft-firmware):
+// alleen in die modus geeft de touch-chip tijdens deep sleep een tik door.
+constexpr uint16_t GT911_COMMAND = 0x8040;
+constexpr uint16_t GT911_COMMAND2 = 0x8046;
+constexpr uint8_t GT911_GEBARENMODUS = 0x08;
 
 inline Wekreden wekreden() {
   switch (esp_sleep_get_wakeup_cause()) {
     case ESP_SLEEP_WAKEUP_TIMER:
       return WEK_TIMER;
-    case ESP_SLEEP_WAKEUP_EXT1:
+    case ESP_SLEEP_WAKEUP_EXT0:  // touch
+    case ESP_SLEEP_WAKEUP_EXT1:  // knoppen
       return WEK_GEBRUIKER;
     default:
       return WEK_STROOM;
@@ -961,17 +971,24 @@ inline Wekreden wekreden() {
 }
 
 inline bool gewekt_door(gpio_num_t pin) {
-  return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1 &&
-         (esp_sleep_get_ext1_wakeup_status() & (1ULL << pin));
+  const auto oorzaak = esp_sleep_get_wakeup_cause();
+  if (pin == PIN_TOUCH_INT)
+    return oorzaak == ESP_SLEEP_WAKEUP_EXT0;
+  return oorzaak == ESP_SLEEP_WAKEUP_EXT1 && (esp_sleep_get_ext1_wakeup_status() & (1ULL << pin));
 }
 
-// Direct na het opstarten: vastgezette pinnen weer vrijgeven en bijhouden of
-// de touch-chip ons steeds meteen wakker maakt (dan touch-wekken uitzetten).
+// Direct na het opstarten: pinnen weer vrijgeven en bijhouden of de touch-chip
+// ons steeds meteen wakker maakt (dan touch-wekken uitzetten).
 inline void na_wakker_worden() {
-  for (gpio_num_t pin : UIT_IN_SLAAP)
+  for (gpio_num_t pin : UIT_IN_SLAAP_RTC)
+    gpio_hold_dis(pin);
+  for (gpio_num_t pin : UIT_IN_SLAAP_DIGITAAL)
     gpio_hold_dis(pin);
   gpio_hold_dis(PIN_TOUCH_RESET);
   gpio_deep_sleep_hold_dis();
+  // De touch-interrupt stond als RTC-ingang voor ext0; terug naar een gewone pin.
+  rtc_gpio_pulldown_dis(PIN_TOUCH_INT);
+  rtc_gpio_deinit(PIN_TOUCH_INT);
   if (gewekt_door(PIN_TOUCH_INT) && rtc_slaap_begin != 0 && std::time(nullptr) - rtc_slaap_begin < 5) {
     if (rtc_snelle_touch_wekkers < 255)
       rtc_snelle_touch_wekkers++;
@@ -982,33 +999,73 @@ inline void na_wakker_worden() {
 
 inline bool touch_wekken_actief(bool ingesteld) { return ingesteld && rtc_snelle_touch_wekkers < 3; }
 
+inline bool gt911_schrijf(esphome::i2c::I2CBus *bus, uint8_t adres, uint16_t reg, uint8_t waarde) {
+  const uint8_t data[3] = {static_cast<uint8_t>(reg >> 8), static_cast<uint8_t>(reg & 0xFF), waarde};
+  return bus->write(adres, data, sizeof(data)) == esphome::i2c::ERROR_OK;
+}
+
 // Vlak voor deep sleep: randapparatuur uit, wekbronnen instellen.
-inline void bereid_slaap_voor(bool touch_wekt) {
-  const bool touch = touch_wekken_actief(touch_wekt);
-  for (gpio_num_t pin : UIT_IN_SLAAP) {
+//
+// Met touch-wekken werkt het zoals in Seeeds SenseCraft-firmware: GT911 in
+// gebarenmodus, de INT-pin wordt hoog bij aanraking en wekt via ext0. Omdat
+// gpio_deep_sleep_hold_en() ext0 breekt, worden dan alleen de RTC-pinnen
+// vastgezet (iets meer slaapstroom). Zonder touch-wekken gaat alles vast uit.
+inline void bereid_slaap_voor(bool touch_wekt, esphome::i2c::I2CBus *bus, uint8_t touch_adres) {
+  bool touch = touch_wekken_actief(touch_wekt);
+  if (touch) {
+    const bool ok = gt911_schrijf(bus, touch_adres, GT911_COMMAND2, GT911_GEBARENMODUS);
+    esphome::delay(1);
+    touch = gt911_schrijf(bus, touch_adres, GT911_COMMAND, GT911_GEBARENMODUS) && ok;
+    esphome::delay(10);
+    if (!touch) {
+      ESP_LOGW("ink", "Touch-chip niet in gebarenmodus gekregen; alleen wekken met de knoppen");
+    }
+  }
+
+  for (gpio_num_t pin : UIT_IN_SLAAP_RTC) {
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);
     gpio_set_level(pin, 0);
     gpio_hold_en(pin);
   }
-  // Touch-chip aan laten (reset hoog) als die mag wekken, anders uit.
-  gpio_set_direction(PIN_TOUCH_RESET, GPIO_MODE_OUTPUT);
-  gpio_set_level(PIN_TOUCH_RESET, touch ? 1 : 0);
-  gpio_hold_en(PIN_TOUCH_RESET);
-  gpio_deep_sleep_hold_en();
+  for (gpio_num_t pin : UIT_IN_SLAAP_DIGITAAL) {
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+    gpio_set_level(pin, 0);
+    if (!touch)
+      gpio_hold_en(pin);
+  }
+  if (!touch) {
+    // Touch-chip uit (reset laag) en alles vastzetten
+    gpio_set_direction(PIN_TOUCH_RESET, GPIO_MODE_OUTPUT);
+    gpio_set_level(PIN_TOUCH_RESET, 0);
+    gpio_hold_en(PIN_TOUCH_RESET);
+    gpio_deep_sleep_hold_en();
+  }
 
+  // Knoppen: actief laag, via ext1
   uint64_t masker = 0;
   for (gpio_num_t pin : KNOPPEN) {
     masker |= 1ULL << pin;
     rtc_gpio_pullup_en(pin);
     rtc_gpio_pulldown_dis(pin);
   }
-  if (touch) {
-    masker |= 1ULL << PIN_TOUCH_INT;
-    rtc_gpio_pullup_en(PIN_TOUCH_INT);
-    rtc_gpio_pulldown_dis(PIN_TOUCH_INT);
-  }
-  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
   esp_sleep_enable_ext1_wakeup(masker, ESP_EXT1_WAKEUP_ANY_LOW);
+
+  // Touch: actief hoog, via ext0. Eerst wachten tot de INT-pin rustig (laag) is.
+  if (touch) {
+    rtc_gpio_init(PIN_TOUCH_INT);
+    rtc_gpio_set_direction(PIN_TOUCH_INT, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_dis(PIN_TOUCH_INT);
+    rtc_gpio_pulldown_en(PIN_TOUCH_INT);
+    const uint32_t start = esphome::millis();
+    while (rtc_gpio_get_level(PIN_TOUCH_INT) != 0 && esphome::millis() - start < 300)
+      esphome::delay(5);
+    if (rtc_gpio_get_level(PIN_TOUCH_INT) != 0) {
+      ESP_LOGW("ink", "Touch-INT nog hoog; het scherm wordt mogelijk meteen weer wakker");
+    }
+    esp_sleep_enable_ext0_wakeup(PIN_TOUCH_INT, 1);
+  }
+
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
   rtc_slaap_begin = std::time(nullptr);
 }
 #endif
