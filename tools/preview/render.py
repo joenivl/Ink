@@ -10,6 +10,7 @@ draait de tests en tekent elk scenario met Pillow.
 
 import json
 import pathlib
+import re
 import subprocess
 import urllib.request
 
@@ -32,13 +33,28 @@ FONT_DEFS = [  # (naam, gewicht, grootte)
 ]
 SCENARIOS = ["week", "maand", "luisteren", "voorstel", "notitie", "melding", "accu-laag", "slaapstand", "wakker-worden"]
 TEKENS = list(range(32, 0x250)) + [0x2013, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026]
+EMOJI_FAMILIE = "Noto Emoji"  # 'extras' in de font:-sectie
 
 
-def font_bestand(gewicht: int) -> pathlib.Path:
-    pad = FONTS / f"{FAMILIE.lower().replace(' ', '_')}-{gewicht}.ttf"
+def iconen() -> list:
+    """ICONEN uit ink_kalender.h, gecontroleerd tegen de glyphs in de YAML."""
+    h = (ROOT / "esphome" / "ink_kalender.h").read_text()
+    lijst = [int(c, 16) for c in re.findall(r"0x([0-9A-F]+)", h.split("ICONEN[] = {")[1].split("};")[0])]
+    yml = (ROOT / "esphome" / "ink-kalender.yaml").read_text()
+    glyphs = [ord(c) for c in re.findall(r'"(.)"', yml.split("extras: &iconen")[1].split("]")[0])]
+    assert lijst == sorted(set(lijst)), "ICONEN moet gesorteerd zijn, zonder dubbele"
+    assert sorted(glyphs) == lijst, "ICONEN in ink_kalender.h en de glyphs in ink-kalender.yaml verschillen"
+    return lijst
+
+
+ICONEN = iconen()
+
+
+def font_bestand(gewicht: int, familie: str = FAMILIE) -> pathlib.Path:
+    pad = FONTS / f"{familie.lower().replace(' ', '_')}-{gewicht}.ttf"
     if not pad.exists():
         FONTS.mkdir(parents=True, exist_ok=True)
-        familie = FAMILIE.replace(" ", "+")
+        familie = familie.replace(" ", "+")
         req = urllib.request.Request(
             f"https://fonts.googleapis.com/css2?family={familie}:wght@{gewicht}",
             headers={"User-Agent": "Wget/1.0"},  # geeft TTF-links i.p.v. WOFF2
@@ -50,27 +66,41 @@ def font_bestand(gewicht: int) -> pathlib.Path:
 
 
 def laad_fonts() -> dict:
+    """Per naam (lettertype, emoji-lettertype van dezelfde grootte)."""
     return {
-        naam: ImageFont.truetype(str(font_bestand(gewicht)), grootte)
+        naam: (ImageFont.truetype(str(font_bestand(gewicht)), grootte),
+               ImageFont.truetype(str(font_bestand(400, EMOJI_FAMILIE)), grootte))
         for naam, gewicht, grootte in FONT_DEFS
     }
+
+
+def stukken(s: str, fonts: tuple) -> list:
+    """Tekst in stukken per lettertype: emoji uit het emoji-lettertype."""
+    uit = []
+    for c in s:
+        f = fonts[1] if ord(c) in ICONEN else fonts[0]
+        if uit and uit[-1][1] is f:
+            uit[-1][0] += c
+        else:
+            uit.append([c, f])
+    return uit
 
 
 def schrijf_metrics(fonts: dict) -> None:
     regels = ["#pragma once", "#include <cstdint>", "namespace metrics {"]
     tabellen = []
     for i, (naam, _, _) in enumerate(FONT_DEFS):
-        f = fonts[naam]
-        breedtes = [round(f.getlength(chr(c))) for c in TEKENS]
+        tekens, emoji = fonts[naam]
+        breedtes = [round(tekens.getlength(chr(c))) for c in TEKENS] + [round(emoji.getlength(chr(c))) for c in ICONEN]
         regels.append(f"static const uint16_t B{i}[] = {{{','.join(map(str, breedtes))}}};")
         tabellen.append(f"B{i}")
-    regels.append(f"static const uint32_t CP[] = {{{','.join(map(str, TEKENS))}}};")
+    regels.append(f"static const uint32_t CP[] = {{{','.join(map(str, TEKENS + ICONEN))}}};")
     regels.append(f"static const uint16_t *const TAB[] = {{{','.join(tabellen)}}};")
-    hoogtes = [sum(fonts[n].getmetrics()) for n, _, _ in FONT_DEFS]
+    hoogtes = [sum(fonts[n][0].getmetrics()) for n, _, _ in FONT_DEFS]
     regels.append(f"static const int H[] = {{{','.join(map(str, hoogtes))}}};")
     regels.append(
         "inline int breedte(int f, uint32_t cp) {"
-        f" for (int i = 0; i < {len(TEKENS)}; i++) if (CP[i] == cp) return TAB[f][i];"
+        f" for (int i = 0; i < {len(TEKENS) + len(ICONEN)}; i++) if (CP[i] == cp) return TAB[f][i];"
         " return TAB[f][31]; }"  # onbekend teken: breedte van '?'
     )
     regels.append("inline int hoogte(int f) { return H[f]; }")
@@ -109,8 +139,15 @@ def teken(opdrachten: list, fonts: dict) -> Image.Image:
             else:
                 d.ellipse(vak, outline=o["c"])
         elif o["op"] == "text":
-            anker = ["la", "ma", "ra"][o["align"]]
-            d.text((o["x"], o["y"]), o["s"], font=fonts[o["font"]], fill=o["c"], anchor=anker)
+            # Op de basislijn van het lettertype, zoals ESPHome emoji uit 'extras' plaatst.
+            f = fonts[o["font"]]
+            delen = stukken(o["s"], f)
+            totaal = sum(fd.getlength(s) for s, fd in delen)
+            x = o["x"] - [0, totaal / 2, totaal][o["align"]]
+            y = o["y"] + f[0].getmetrics()[0]
+            for s, fd in delen:
+                d.text((x, y), s, font=fd, fill=o["c"], anchor="ls")
+                x += fd.getlength(s)
     # 16 grijstinten, zoals het paneel
     return img.point(lambda v: round(v / 17) * 17)
 

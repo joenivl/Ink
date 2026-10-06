@@ -11,16 +11,16 @@ static const char *const VOORBEELD =
     "2026-10-02|-|Spullen wegbrengen\n"
     "2026-10-03|-|Loek afzwemmen\n"
     "2026-10-05|09:30|Sanne pilates\n"
-    "2026-10-05|17:00|Ties voetbaltraining\n"
-    "2026-10-05|-|Elise jarig\n"
+    "2026-10-05|17:00|⚽ Ties voetbaltraining\n"
+    "2026-10-05|-|🎂 Elise jarig\n"
     "2026-10-07|-|Ties & Loek voetbalmiddag\n"
     "2026-10-08|-|Sanne ontwikkeldag\n"
-    "2026-10-08|16:00|Loek zwemles\n"
+    "2026-10-08|16:00|🏊 Loek zwemles\n"
     "2026-10-09|-|Verjaardag Faye\n"
     "2026-10-09|18:30|Ties extra training\n"
     "2026-10-10|11:00|Verjaardag Sylvia\n"
     "2026-10-10|-|Voetbal?\n"
-    "2026-10-12|-|Vakantie\n"
+    "2026-10-12|-|✈️ Vakantie\n"
     "2026-10-13|-|Vakantie\n"
     "2026-10-14|-|Vakantie\n"
     "2026-10-15|-|Efteling\n"
@@ -32,7 +32,7 @@ static const char *const VOORBEELD =
     "2026-10-26|20:30|Sanne Ferdi\n"
     "2026-10-27|20:15|Sanne vergadering\n"
     "2026-10-30|-|Dieuwke weekend\n"
-    "2026-11-02|08:30|Tandarts\n";
+    "2026-11-02|08:30|🦷 Tandarts\n";
 
 int main(int argc, char **argv) {
   const char *scenario = argc > 1 ? argv[1] : "week";

@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -159,6 +160,73 @@ inline std::string datum_lang(const Datum &dt) {
   return buf;
 }
 
+// ---------------------------------------------------------------- iconen ---
+
+// Emoji die in de fonts zitten (Noto Emoji, via 'extras' in ink-kalender.yaml).
+// Moet gelijk zijn aan die lijst; tools/preview/render.py controleert dat.
+// Gesorteerd, voor binary_search.
+static const uint32_t ICONEN[] = {
+    0x23F0, 0x2600, 0x2615, 0x267B, 0x26A0, 0x26BD, 0x26C4, 0x26F3,               // ⏰ ☀ ☕ ♻ ⚠ ⚽ ⛄ ⛳
+    0x26FA, 0x2702, 0x2705, 0x2708, 0x270F, 0x2714, 0x2728, 0x2744,               // ⛺ ✂ ✅ ✈ ✏ ✔ ✨ ❄
+    0x274C, 0x2753, 0x2757, 0x2764, 0x2B50, 0x1F308, 0x1F30D, 0x1F319,            // ❌ ❓ ❗ ❤ ⭐ 🌈 🌍 🌙
+    0x1F31F, 0x1F327, 0x1F331, 0x1F337, 0x1F33B, 0x1F355, 0x1F370, 0x1F374,       // 🌟 🌧 🌱 🌷 🌻 🍕 🍰 🍴
+    0x1F377, 0x1F37A, 0x1F37D, 0x1F381, 0x1F382, 0x1F383, 0x1F384, 0x1F385,       // 🍷 🍺 🍽 🎁 🎂 🎃 🎄 🎅
+    0x1F388, 0x1F389, 0x1F393, 0x1F39F, 0x1F3A4, 0x1F3A8, 0x1F3AB, 0x1F3AC,       // 🎈 🎉 🎓 🎟 🎤 🎨 🎫 🎬
+    0x1F3AD, 0x1F3AE, 0x1F3AF, 0x1F3B5, 0x1F3B6, 0x1F3B8, 0x1F3B9, 0x1F3BE,       // 🎭 🎮 🎯 🎵 🎶 🎸 🎹 🎾
+    0x1F3BF, 0x1F3C0, 0x1F3C3, 0x1F3C6, 0x1F3CA, 0x1F3CB, 0x1F3D4, 0x1F3D6,       // 🎿 🏀 🏃 🏆 🏊 🏋 🏔 🏖
+    0x1F3E0, 0x1F3E1, 0x1F3E5, 0x1F3EB, 0x1F408, 0x1F415, 0x1F423, 0x1F430,       // 🏠 🏡 🏥 🏫 🐈 🐕 🐣 🐰
+    0x1F431, 0x1F434, 0x1F436, 0x1F43E, 0x1F44B, 0x1F44D, 0x1F44F, 0x1F453,       // 🐱 🐴 🐶 🐾 👋 👍 👏 👓
+    0x1F466, 0x1F467, 0x1F468, 0x1F469, 0x1F46A, 0x1F474, 0x1F475, 0x1F476,       // 👦 👧 👨 👩 👪 👴 👵 👶
+    0x1F47B, 0x1F487, 0x1F489, 0x1F48A, 0x1F48D, 0x1F495, 0x1F4A1, 0x1F4AA,       // 👻 💇 💉 💊 💍 💕 💡 💪
+    0x1F4B0, 0x1F4B6, 0x1F4BB, 0x1F4BC, 0x1F4C5, 0x1F4C6, 0x1F4CC, 0x1F4D6,       // 💰 💶 💻 💼 📅 📆 📌 📖
+    0x1F4DA, 0x1F4DD, 0x1F4DE, 0x1F4E7, 0x1F4F7, 0x1F4FA, 0x1F514, 0x1F525,       // 📚 📝 📞 📧 📷 📺 🔔 🔥
+    0x1F527, 0x1F528, 0x1F56F, 0x1F5D1, 0x1F600, 0x1F60A, 0x1F60D, 0x1F60E,       // 🔧 🔨 🕯 🗑 😀 😊 😍 😎
+    0x1F634, 0x1F64F, 0x1F686, 0x1F68C, 0x1F697, 0x1F6A2, 0x1F6B2, 0x1F6B4,       // 😴 🙏 🚆 🚌 🚗 🚢 🚲 🚴
+    0x1F6C1, 0x1F6CF, 0x1F6D2, 0x1F912, 0x1F938, 0x1F942, 0x1F95A, 0x1F973,       // 🛁 🛏 🛒 🤒 🤸 🥂 🥚 🥳
+    0x1F9B7, 0x1F9D2, 0x1F9D8, 0x1F9E9, 0x1F9F3, 0x1F9F8, 0x1F9F9, 0x1F9FA,       // 🦷 🧒 🧘 🧩 🧳 🧸 🧹 🧺
+    0x1FA70, 0x1FA7A, 0x1FA81, 0x1FAB4,                                           // 🩰 🩺 🪁 🪴
+};
+
+inline bool is_icoon(uint32_t cp) { return std::binary_search(std::begin(ICONEN), std::end(ICONEN), cp); }
+
+// Leest het UTF-8-teken op positie i en zet i erachter.
+inline uint32_t utf8_teken(const std::string &s, size_t &i) {
+  const auto b = [&](size_t k) { return k < s.size() ? static_cast<uint8_t>(s[k]) : 0; };
+  const uint8_t c = b(i);
+  if (c < 0x80) {
+    i += 1;
+    return c;
+  }
+  if ((c & 0xE0) == 0xC0) {
+    i += 2;
+    return ((c & 0x1F) << 6) | (b(i - 1) & 0x3F);
+  }
+  if ((c & 0xF0) == 0xE0) {
+    i += 3;
+    return ((c & 0x0F) << 12) | ((b(i - 2) & 0x3F) << 6) | (b(i - 1) & 0x3F);
+  }
+  i += 4;
+  return ((c & 0x07) << 18) | ((b(i - 3) & 0x3F) << 12) | ((b(i - 2) & 0x3F) << 6) | (b(i - 1) & 0x3F);
+}
+
+// Haalt weg wat de fonts niet kunnen tekenen (anders een leeg blokje): emoji
+// buiten ICONEN en de onzichtbare emoji-hulptekens (variatiekiezer, ZWJ,
+// huidskleur, keycap, vlaggen). Dubbele spaties die dat oplevert gaan ook weg.
+inline std::string zonder_onbekende_iconen(const std::string &s) {
+  std::string uit;
+  for (size_t i = 0; i < s.size();) {
+    const size_t begin = i;
+    const uint32_t cp = utf8_teken(s, i);
+    const bool weg = (cp >= 0x2190 && !is_icoon(cp)) || (cp >= 0x200B && cp <= 0x200F) || cp == 0x20E3;
+    if (weg || (cp == ' ' && (uit.empty() || uit.back() == ' ')))
+      continue;
+    uit.append(s, begin, std::min(i, s.size()) - begin);
+  }
+  while (!uit.empty() && uit.back() == ' ')
+    uit.pop_back();
+  return uit;
+}
+
 // --------------------------------------------------------------- gegevens ---
 
 struct Afspraak {
@@ -192,6 +260,7 @@ inline std::vector<Afspraak> lees_afspraken(const std::string &tekst) {
     af.titel = regel.substr(b + 1);
     if (!af.titel.empty() && af.titel.back() == '\r')
       af.titel.pop_back();
+    af.titel = zonder_onbekende_iconen(af.titel);
     uit.push_back(af);
   }
   return uit;
@@ -236,6 +305,7 @@ inline std::vector<Notitie> lees_notities(const std::string &tekst) {
       n.uid = regel.substr(a + 1, b - a - 1);
       n.tekst = regel.substr(b + 1);
     }
+    n.tekst = zonder_onbekende_iconen(n.tekst);
     if (!n.tekst.empty())
       uit.push_back(n);
   }
