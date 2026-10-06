@@ -207,8 +207,9 @@ api:
             tekst: !lambda return tekst;
 
 ota:
+  # Versleuteld met de API-sleutel; een apart OTA-wachtwoord is niet nodig.
   - platform: esphome
-    password: !secret ota_wachtwoord
+    encryption:
 
 wifi:
   ssid: !secret wifi_iot_ssid

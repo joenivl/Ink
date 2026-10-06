@@ -89,7 +89,7 @@ Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7
 
 ### 2. Scherm flashen
 
-1. Zet in de ESPHome Builder-add-on je secrets (wifi, API-sleutel, OTA-wachtwoord),
+1. Zet in de ESPHome Builder-add-on je secrets (wifi en API-sleutel),
    zie `esphome/secrets.example.yaml`.
 2. Zet `ink-kalender.yaml` en `ink_kalender.h` samen in `/config/esphome/`. Dat kan
    via de *File editor*- of *Studio Code Server*-add-on.
