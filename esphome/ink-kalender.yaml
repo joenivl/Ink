@@ -204,8 +204,8 @@ ota:
     password: !secret ota_wachtwoord
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_wachtwoord
+  ssid: !secret wifi_iot_ssid
+  password: !secret wifi_iot_password
   ap:
     ssid: Ink-Kalender
     password: !secret herstel_wachtwoord
