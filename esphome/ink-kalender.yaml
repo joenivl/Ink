@@ -49,6 +49,17 @@ substitutions:
   # Zet op "false" als het scherm meteen weer wakker wordt (dan alleen de knoppen).
   touch_wekt: "true"
 
+  # Geluidjes (aan/uit en volume ook in HA). Melodietjes in RTTTL-formaat:
+  # d = standaardlengte, o = octaaf, b = tempo; daarna de noten.
+  volume: "15"         # procent, startwaarde
+  stil_van: "21"       # 's avonds/'s nachts stil van ... tot ... uur
+  stil_tot: "7"
+  geluid_tik: "tik:d=32,o=6,b=240:g"
+  geluid_luister: "luister:d=32,o=6,b=200:c,g"
+  geluid_klaar: "klaar:d=32,o=6,b=200:g,c"
+  geluid_opgeslagen: "ok:d=16,o=6,b=200:c,e,g"
+  geluid_melding: "melding:d=16,o=5,b=160:a,f"
+
   # Knoppen onderaan. Werkt met alles wat homeassistant.toggle snapt
   # (lampen, schakelaars, scripts, groepen). Naam leeg = knop verbergen.
   knop1_naam: Woonkamer
@@ -411,7 +422,11 @@ output:
   - platform: ledc
     id: zoemer
     pin: GPIO45
-    frequency: 2000Hz
+
+rtttl:
+  id: melodie
+  output: zoemer
+  gain: ${volume}%
 
 binary_sensor:
   - platform: gpio
@@ -481,9 +496,15 @@ voice_assistant:
   auto_gain: ${mic_auto_gain}
   on_listening:
     - script.execute:
+        id: geluid
+        soort: 1  # luister
+    - script.execute:
         id: zet_status
         status: !lambda return ink::LUISTEREN;
   on_stt_vad_end:
+    - script.execute:
+        id: geluid
+        soort: 2  # klaar
     - script.execute:
         id: zet_status
         status: !lambda return ink::VERWERKEN;
@@ -537,7 +558,36 @@ voice_assistant:
 deep_sleep:
   id: slaap
 
+number:
+  - platform: template
+    id: volume
+    name: Volume
+    icon: mdi:volume-medium
+    entity_category: config
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 50
+    step: 5
+    optimistic: true
+    restore_value: true
+    initial_value: ${volume}
+    on_value:
+      - lambda: id(melodie).set_gain(x / 100.0f);
+    set_action:
+      - lambda: id(melodie).set_gain(x / 100.0f);
+      # even laten horen hoe hard het is
+      - script.execute:
+          id: geluid
+          soort: 0
+
 switch:
+  - platform: template
+    id: geluid_aan
+    name: Geluid
+    icon: mdi:volume-high
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
   - platform: template
     id: spaarstand
     name: Spaarstand
@@ -584,15 +634,31 @@ script:
                 mode: !lambda |-
                   return (ink::ververs_mask() & ink::VOL) ? it8951::UPDATE_MODE_GC16 : it8951::UPDATE_MODE_DU;
 
-  - id: piep
+  # Speelt een geluidje, tenzij geluid uit staat of het stille uren zijn.
+  - id: geluid
     mode: restart
+    parameters:
+      soort: int
     then:
-      - output.turn_on: zoemer
-      - output.set_level:
-          id: zoemer
-          level: 50%
-      - delay: 60ms
-      - output.turn_off: zoemer
+      - if:
+          condition:
+            lambda: |-
+              if (!id(geluid_aan).state)
+                return false;
+              auto nu = id(ha_tijd).now();
+              if (!nu.is_valid())
+                nu = id(rtc_tijd).now();
+              if (!nu.is_valid())
+                return true;
+              const int van = ${stil_van}, tot = ${stil_tot};
+              const bool stil = van > tot ? (nu.hour >= van || nu.hour < tot) : (nu.hour >= van && nu.hour < tot);
+              return !stil;
+          then:
+            - rtttl.play:
+                rtttl: !lambda |-
+                  static const char *const MELODIE[] = {"${geluid_tik}", "${geluid_luister}", "${geluid_klaar}",
+                                                        "${geluid_opgeslagen}", "${geluid_melding}"};
+                  return std::string(MELODIE[soort]);
 
   - id: zet_status
     parameters:
@@ -610,6 +676,9 @@ script:
     parameters:
       tekst: string
     then:
+      - script.execute:
+          id: geluid
+          soort: 4  # melding
       - script.stop: wacht_op_ha
       - lambda: |-
           auto &s = ink::staat();
@@ -842,7 +911,9 @@ script:
                 condition:
                   lambda: return zone != ink::GEEN;
                 then:
-                  - script.execute: piep
+                  - script.execute:
+                      id: geluid
+                      soort: 0  # tik
             # Tabs
             - if:
                 condition:
@@ -906,6 +977,9 @@ script:
                 condition:
                   lambda: return zone == ink::OPSLAAN;
                 then:
+                  - script.execute:
+                      id: geluid
+                      soort: 3  # opgeslagen
                   - homeassistant.event:
                       event: esphome.ink_opslaan
                       data:

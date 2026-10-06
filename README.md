@@ -159,6 +159,24 @@ lager. Wat HA verstaan heeft, zie je via Instellingen → Spraakassistenten →
 
 **"Geen verbinding" bovenaan.** Het scherm heeft vijf minuten geen contact met HA gehad.
 
+## Geluidjes
+
+Zachte korte melodietjes in plaats van een piep:
+
+| Wanneer | Geluid |
+|---|---|
+| Tik op een knop | kort zacht tikje |
+| Inspreken begint | twee tonen omhoog |
+| Je bent gehoord | twee tonen omlaag |
+| Opgeslagen | drie tonen omhoog (akkoordje) |
+| Melding / iets ging mis | twee lage tonen omlaag |
+
+In HA staan bij het apparaat een schakelaar **Geluid** en een schuif **Volume**
+(0–50%, standaard 15%; bij het verschuiven hoor je hoe hard het wordt). 's Avonds
+en 's nachts (21:00–7:00) is het stil. De tijden en de melodietjes zelf staan
+bovenin `ink-kalender.yaml` (RTTTL-formaat, dat is hetzelfde formaat als oude
+Nokia-ringtones).
+
 ## Accu
 
 In Home Assistant komen twee sensoren bij het apparaat: **Accu** (%) en
