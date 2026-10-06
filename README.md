@@ -194,8 +194,8 @@ Staat standaard **aan** (schakelaar **Spaarstand** bij het apparaat in HA).
 
 | Wat | Wat je ziet |
 |---|---|
-| Een minuut niets gedaan | Onderin verschijnt **"Slaapstand – tik op het scherm om te wekken"**; de agenda blijft gewoon zichtbaar (e-paper heeft geen stroom nodig om een beeld te houden). |
-| Tik op het scherm of druk op een knop | Onderin **"Even wakker worden…"**; na een paar seconden ververst het scherm en werkt alles. De tik waarmee je wekt telt niet als tik op een knop. |
+| Een minuut niets gedaan | Onderin verschijnt **"Slaapstand – tik twee keer op het scherm om te wekken"**; de agenda blijft gewoon zichtbaar (e-paper heeft geen stroom nodig om een beeld te houden). |
+| Dubbeltik op het scherm of druk op een knop | Onderin **"Even wakker worden…"**; na een paar seconden ververst het scherm en werkt alles. De dubbeltik waarmee je wekt telt niet als tik op een knop. Een enkele tik wekt hem niet. |
 | Groene knop terwijl hij slaapt | Wordt wakker en begint daarna meteen met luisteren. |
 | Elk half uur | Wordt stil wakker, haalt de agenda op en ververst **alleen als er iets veranderd is**. Daarna weer slapen. |
 | 's Nachts (23:00–6:00) | Slaapt door tot 6:00. |
@@ -218,12 +218,11 @@ echte waarde na een paar dagen in de geschiedenis van *Accu*.
   minuut in HA de **Spaarstand** uit. Na de update zet je hem weer aan.
 - **Touch-wekken:** werkt zoals in Seeeds eigen SenseCraft-firmware: vlak voor het
   slapen gaat de touch-chip in "gebarenmodus" en wekt hij het scherm via een
-  aparte wekpin (ext0). Reageert een gewone tik niet, probeer dan een **dubbeltik**:
-  welk gebaar de chip in die modus herkent, is niet gedocumenteerd. Wordt het
-  scherm steeds meteen weer wakker, dan schakelt Ink touch-wekken na drie keer zelf
-  uit tot je een keer met een knop wekt. Werkt het helemaal niet, zet dan
-  `touch_wekt: "false"`; dan gaat bovendien alles tijdens de slaap helemaal uit
-  (zuiniger).
+  aparte wekpin (ext0). In die modus herkent de chip alleen een **dubbeltik**; een
+  enkele tik wekt hem niet (getest op het apparaat). Wordt het scherm steeds meteen
+  weer wakker, dan schakelt Ink touch-wekken na drie keer zelf uit tot je een keer
+  met een knop wekt. Werkt het helemaal niet, zet dan `touch_wekt: "false"`; dan
+  gaat bovendien alles tijdens de slaap helemaal uit (zuiniger).
 - **Aan de stroom:** hangt hij aan USB-C, zet dan de spaarstand gewoon uit voor een
   scherm dat altijd direct reageert.
 

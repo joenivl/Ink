@@ -715,7 +715,7 @@ inline void teken_slaapbalk(Display &it, const Staat &s, const Fonts &f) {
     it.filled_circle(MARGE + 70, KNOP_Y + KNOP_H / 2, 30, v);
     it.filled_circle(MARGE + 84, KNOP_Y + KNOP_H / 2 - 12, 28, a);
     tekst(it, MARGE + 130, KNOP_Y + 14, f.groot, v, a, TextAlign::TOP_LEFT, "Slaapstand");
-    tekst(it, B - MARGE - 40, KNOP_Y + 22, f.kop, v, a, TextAlign::TOP_RIGHT, "Tik op het scherm om te wekken");
+    tekst(it, B - MARGE - 40, KNOP_Y + 22, f.kop, v, a, TextAlign::TOP_RIGHT, "Tik twee keer op het scherm om te wekken");
     tekst(it, B - MARGE - 40, KNOP_Y + 68, f.normaal, v, a, TextAlign::TOP_RIGHT,
           "of druk op een knop · de agenda ververst vanzelf");
   }

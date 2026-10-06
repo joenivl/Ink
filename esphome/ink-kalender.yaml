@@ -4,7 +4,7 @@
 # - knoppen om Home Assistant te bedienen
 # - afspraken en notities inspreken via de ingebouwde microfoon
 # - notities afvinken door erop te tikken
-# - spaarstand: slaapt tussendoor, wakker door een tik of knop
+# - spaarstand: slaapt tussendoor, wakker door een dubbeltik of knop
 #
 # Hoort bij de blueprint homeassistant/blueprints/ink_kalender.yaml.
 # Installatie: zie README.md.
@@ -40,7 +40,7 @@ substitutions:
   # Spaarstand (aan/uit ook via de schakelaar "Spaarstand" in HA).
   # Het scherm slaapt na `wakker_na_gebruik` zonder aanraking, wordt elke
   # `wekker_elke` minuten stil wakker om de agenda te verversen en slaapt 's
-  # nachts door van `nacht_van` tot `nacht_tot` uur. Wekken: tik of knop.
+  # nachts door van `nacht_van` tot `nacht_tot` uur. Wekken: dubbeltik of knop.
   spaarstand_bij_start: RESTORE_DEFAULT_ON
   wakker_na_gebruik: 60s
   wekker_elke: "30"
