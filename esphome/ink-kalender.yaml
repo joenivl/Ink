@@ -474,6 +474,8 @@ voice_assistant:
     - script.execute:
         id: zet_status
         status: !lambda return ink::VERWERKEN;
+    # Ook als de spraakherkenning nooit antwoordt niet blijven hangen.
+    - script.execute: wacht_op_ha
   on_stt_end:
     - lambda: id(spraak_tekst_ontvangen) = true;
     - if:
@@ -510,6 +512,14 @@ voice_assistant:
           - script.execute:
               id: zet_status
               status: !lambda return ink::RUST;
+    # Wel gesproken, maar de herkenning stopte zonder tekst of foutmelding.
+    - if:
+        condition:
+          lambda: return !id(spraak_tekst_ontvangen) && ink::staat().status == ink::VERWERKEN;
+        then:
+          - script.execute:
+              id: melding
+              tekst: Geen tekst van de spraakherkenning. Probeer het nog eens.
 
 deep_sleep:
   id: slaap
@@ -834,17 +844,22 @@ script:
                 condition:
                   lambda: return zone == ink::SPREEK;
                 then:
+                  # Tijdens "Even denken…" niets doen: stoppen zou de herkenning afbreken.
                   - if:
-                      condition: voice_assistant.is_running
+                      condition:
+                        lambda: return ink::staat().status != ink::VERWERKEN;
                       then:
-                        - voice_assistant.stop:
-                      else:
-                        - script.stop: venster_sluiten_na_tijd
-                        - lambda: id(spraak_tekst_ontvangen) = false;
-                        - script.execute:
-                            id: zet_status
-                            status: !lambda return ink::LUISTEREN;
-                        - voice_assistant.start:
+                        - if:
+                            condition: voice_assistant.is_running
+                            then:
+                              - voice_assistant.stop:
+                            else:
+                              - script.stop: venster_sluiten_na_tijd
+                              - lambda: id(spraak_tekst_ontvangen) = false;
+                              - script.execute:
+                                  id: zet_status
+                                  status: !lambda return ink::LUISTEREN;
+                              - voice_assistant.start:
             # Home Assistant-knoppen
             - if:
                 condition:
