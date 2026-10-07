@@ -93,6 +93,21 @@ int main() {
   assert(neem_weer_over(g, "e", -1));                      // tijd onbekend: overnemen
   assert(neem_weer_over(g, std::string(500, 'x') + "\n", 0) && g.tekst[0] == '\0');  // te lang
 
+  // Weer van voorbije dagen deze week blijft bewaard
+  {
+    const int wo = dagnummer({2026, 10, 7});  // woensdag
+    WeerGeheugen g{};
+    assert(neem_weer_over(g, "2026-10-05|sunny|17|9\n2026-10-06|rainy|14|10\n2026-10-07|cloudy|15|8", weer_vak(wo - 2, 6, 6)));
+    assert(neem_weer_over(g, "2026-10-07|fog|13|7\n2026-10-08|sunny|18|7", weer_vak(wo, 6, 6)));
+    assert(std::string(g.tekst) ==
+           "2026-10-05|sunny|17|9\n2026-10-06|rainy|14|10\n2026-10-07|fog|13|7\n2026-10-08|sunny|18|7");
+    // Nieuwe week (maandag): het verleden van vorige week valt weg
+    assert(neem_weer_over(g, "2026-10-12|sunny|16|8", weer_vak(wo + 5, 6, 6)));
+    assert(std::string(g.tekst) == "2026-10-12|sunny|16|8");
+    // Weer uitgezet: alles weg
+    assert(neem_weer_over(g, "", weer_vak(wo + 5, 7, 6)) && g.tekst[0] == '\0');
+  }
+
   // Afgevinkte notities: blijven even staan op hun plek, daarna weg
   {
     KlaarGeheugen g{};

@@ -148,7 +148,9 @@ Maak daarna een automatisering van de blueprint. Je kiest daarin de kalenders,
 de kalender voor nieuwe afspraken, eventuele takenlijsten, de AI-taak en
 eventueel een weer-entiteit (bijv. Buienradar of Met.no).
 
-**Weer:** het scherm toont de verwachting van vandaag tot en met zondag. Om
+**Weer:** het scherm toont de verwachting van vandaag tot en met zondag; voor de
+voorbije dagen van deze week blijft de laatste verwachting staan (iets lichter,
+bewaard tijdens de slaap, niet na stroomverlies). Om
 niet steeds te knipperen neemt het een nieuwe verwachting alleen over in een
 nieuw tijdvak van `weer_elke` uur (standaard 6: vanaf 0, 6, 12 en 18 uur; met de
 spaarstand is dat de eerste ronde daarna, dus rond 6:00, 12:00 en 18:00), en
