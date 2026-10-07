@@ -908,10 +908,12 @@ inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
         it.line(x + 17, y + 36 + d, x + 38, y + 9 + d, ZWART);
       }
     }
+    // Alleen zwart/wit: afvinken wordt met de snelle DU-modus getekend, en die
+    // kan geen grijs (grijze pixels veranderen dan niet).
     const std::string t = afkappen(it, f.normaal, n.tekst, NOTITIE_KOL_B - 54);
-    tekst(it, x + 46, y + 10, f.normaal, n.afgevinkt ? GRIJS_DONKER : ZWART, WIT, TextAlign::TOP_LEFT, t);
+    tekst(it, x + 46, y + 10, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, t);
     if (n.afgevinkt)
-      it.filled_rectangle(x + 44, y + 30, breedte(it, f.normaal, t) + 4, 2, GRIJS_DONKER);
+      it.filled_rectangle(x + 44, y + 29, breedte(it, f.normaal, t) + 4, 3, ZWART);
   }
 }
 
