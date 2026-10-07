@@ -303,8 +303,9 @@ actions:
                 {{ e.strftime('%Y-%m-%d %H:%M:%S') }}
 
   # ------------------------------------------------ details van een aangetikte afspraak
-  # Het scherm stuurt dag, begintijd ('-' = hele dag of een vervolgdag) en de
-  # titel zoals hij in de agenda-regels stond; zoek die afspraak op die dag.
+  # Het scherm stuurt de dag en de id van de afspraak (zie afspraken_tekst).
+  # Oudere firmware stuurt geen id: dan op begintijd ('-' = hele dag of een
+  # vervolgdag) en titel zoeken.
   - if:
       - condition: template
         value_template: "{{ trigger.id == 'details' }}"
@@ -329,7 +330,11 @@ actions:
                 {%- set titel = (e.summary | default('') | replace('\n', ' ') | trim) -%}
                 {%- if kalendernaam_tonen -%}{%- set titel = naam ~ ': ' ~ titel -%}{%- endif -%}
                 {%- set tijd = as_local(as_datetime(e.start)).strftime('%H:%M') if 'T' in e.start else '-' -%}
-                {%- if titel == gevraagd.titel and (gevraagd.tijd == '-' or gevraagd.tijd == tijd) -%}
+                {%- set id = ((kal ~ '|' ~ e.start ~ '|' ~ (e.summary | default(''))) | md5)[:12] -%}
+                {%- if (gevraagd.id | default('')) != ''
+                       and id == gevraagd.id
+                       or (gevraagd.id | default('')) == ''
+                       and titel == gevraagd.titel and (gevraagd.tijd == '-' or gevraagd.tijd == tijd) -%}
                   {%- set ns.e = dict(e, kalender=naam) -%}
                 {%- endif -%}
               {%- endfor -%}
@@ -389,7 +394,8 @@ actions:
       end_date_time: "{{ (strptime(grid_start, '%Y-%m-%d') + timedelta(days=42)).strftime('%Y-%m-%d') }} 00:00:00"
     response_variable: agenda
   - variables:
-      # Per regel "JJJJ-MM-DD|UU:MM|titel"; hele-dag-afspraken krijgen '-' als
+      # Per regel "JJJJ-MM-DD~id|UU:MM|titel"; id = vaste id van de afspraak
+      # (md5 van kalender, start en titel; HA geeft zelf geen id). Hele-dag-afspraken krijgen '-' als
       # tijd (en staan zo na sorteren vooraan) en komen op elke dag die ze duren.
       # Een afspraak met tijd over meerdere dagen staat op de begindag met de
       # begintijd en op de dagen erna als hele-dag-balk. Alleen dagen in het
@@ -402,6 +408,7 @@ actions:
           {%- for e in data.events -%}
             {%- set titel = (e.summary | default('') | replace('\n', ' ') | trim) -%}
             {%- if kalendernaam_tonen -%}{%- set titel = naam ~ ': ' ~ titel -%}{%- endif -%}
+            {%- set id = ((kal ~ '|' ~ e.start ~ '|' ~ (e.summary | default(''))) | md5)[:12] -%}
             {%- if 'T' in e.start -%}
               {%- set s = as_local(as_datetime(e.start)) -%}
               {%- set t = as_local(as_datetime(e.end | default(e.start))) -%}
@@ -414,7 +421,7 @@ actions:
               {%- set tijd = '-' -%}
             {%- endif -%}
             {%- for i in range([(g0 - d0).days, 0] | max, [n, (g0 - d0).days + 42] | min) -%}
-              {%- set ns.r = ns.r + [(d0 + timedelta(days=i)).strftime('%Y-%m-%d') ~ '|' ~ (tijd if i == 0 else '-') ~ '|' ~ titel] -%}
+              {%- set ns.r = ns.r + [(d0 + timedelta(days=i)).strftime('%Y-%m-%d') ~ '~' ~ id ~ '|' ~ (tijd if i == 0 else '-') ~ '|' ~ titel] -%}
             {%- endfor -%}
           {%- endfor -%}
         {%- endfor -%}
