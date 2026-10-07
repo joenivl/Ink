@@ -31,7 +31,7 @@ FONT_DEFS = [  # (naam, gewicht, grootte)
     ("kop", 700, 34),
     ("groot", 700, 52),
 ]
-SCENARIOS = ["week", "maand", "luisteren", "voorstel", "notitie", "melding", "accu-laag", "slaapstand", "wakker-worden"]
+SCENARIOS = ["week", "maand", "luisteren", "voorstel", "notitie", "melding", "dag", "details", "accu-laag", "slaapstand", "wakker-worden"]
 TEKENS = list(range(32, 0x250)) + [0x2013, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026]
 EMOJI_FAMILIE = "Noto Emoji"  # 'extras' in de font:-sectie
 
