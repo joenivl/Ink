@@ -90,6 +90,18 @@ int main(int argc, char **argv) {
   } else if (!std::strcmp(scenario, "melding")) {
     s.status = ink::MELDING;
     s.melding = "Ik hoorde \"doe de lampen uit\", maar dat is geen afspraak.";
+  } else if (!std::strcmp(scenario, "dag")) {
+    s.scherm = ink::SCHERM_MAAND;
+    s.dag_gekozen = {2026, 10, 9};
+    s.status = ink::DAG;
+  } else if (!std::strcmp(scenario, "details")) {
+    for (size_t i = 0; i < s.afspraken.size(); i++)
+      if (s.afspraken[i].titel.find("zwemles") != std::string::npos)
+        ink::open_details(s, static_cast<int>(i));
+    ink::zet_details(s, "ja", "Loek zwemles", "2026-10-08", "16:00", "2026-10-08", "16:45", "Zwembad De Hoornse Vaart",
+                     "Diploma C. Zwemkleding, handdoek en de pas meenemen. Ophalen bij de achteringang, "
+                     "ouders mogen de laatste tien minuten kijken.",
+                     "Sanne en Jeroen");
   }
 
   Display it;

@@ -253,6 +253,26 @@ api:
         - script.execute: ververs
         - script.execute: venster_sluiten_na_tijd
         - script.execute: slaap_timer
+    # Antwoord op esphome.ink_details: de details van een aangetikte afspraak.
+    - action: toon_details
+      variables:
+        gevonden: string
+        titel: string
+        datum: string
+        begin: string
+        eind_datum: string
+        eind: string
+        locatie: string
+        omschrijving: string
+        kalender: string
+      then:
+        - script.stop: wacht_op_details
+        - lambda: |-
+            ink::zet_details(ink::staat(), gevonden, titel, datum, begin, eind_datum, eind, locatie, omschrijving,
+                             kalender);
+            if (ink::staat().status == ink::DETAILS)
+              ink::ververs_mask() |= ink::VENSTER;
+        - script.execute: ververs
     - action: toon_melding
       variables:
         tekst: string
@@ -747,6 +767,20 @@ script:
       - script.execute: ververs
       - script.execute: venster_sluiten_na_tijd
 
+  # Geen details van Home Assistant binnen 10 seconden? Dan dat melden in het venster.
+  - id: wacht_op_details
+    mode: restart
+    then:
+      - delay: 10s
+      - lambda: |-
+          auto &s = ink::staat();
+          if (s.status == ink::DETAILS && !s.details.geladen) {
+            s.details.geladen = true;
+            s.details.fout = "Geen antwoord van Home Assistant. Staat de Ink-automatisering aan?";
+            ink::ververs_mask() |= ink::VENSTER;
+          }
+      - script.execute: ververs
+
   # Geen voorstel van Home Assistant binnen een minuut? Dan melden.
   - id: wacht_op_ha
     mode: restart
@@ -1067,12 +1101,57 @@ script:
                       ink::ververs_mask() |= ink::BALK;
                   - script.execute: ververs
                   - script.execute: wacht_op_agenda_timeout
+            # Afspraak aangetikt (week of dagoverzicht): details opvragen bij HA
+            - if:
+                condition:
+                  lambda: |-
+                    const int i = zone - ink::AFSPRAAK0;
+                    return zone < ink::DAG0 && i >= 0 && i < (int) ink::staat().afspraken.size();
+                then:
+                  - homeassistant.event:
+                      event: esphome.ink_details
+                      data:
+                        datum: !lambda return ink::datum_tekst(ink::staat().afspraken[zone - ink::AFSPRAAK0].datum);
+                        tijd: !lambda |-
+                          const auto &a = ink::staat().afspraken[zone - ink::AFSPRAAK0];
+                          return a.tijd.empty() ? std::string("-") : a.tijd;
+                        titel: !lambda return ink::staat().afspraken[zone - ink::AFSPRAAK0].ruw;
+                  - lambda: |-
+                      ink::open_details(ink::staat(), zone - ink::AFSPRAAK0);
+                      ink::ververs_mask() |= ink::VENSTER | ink::BALK;
+                  - script.execute: ververs
+                  - script.execute: wacht_op_details
+                  - script.execute: venster_sluiten_na_tijd
+            # Dag aangetikt (maand, of "+N meer" in de week): overzicht van die dag
+            - if:
+                condition:
+                  lambda: return zone >= ink::DAG0;
+                then:
+                  - lambda: |-
+                      auto &s = ink::staat();
+                      s.dag_gekozen = ink::van_dagnummer(zone - ink::DAG0);
+                      s.status = ink::DAG;
+                      ink::ververs_mask() |= ink::VENSTER | ink::BALK;
+                  - script.execute: ververs
+                  - script.execute: venster_sluiten_na_tijd
+            # Van de details terug naar het dagoverzicht
+            - if:
+                condition:
+                  lambda: return zone == ink::TERUG;
+                then:
+                  - script.stop: wacht_op_details
+                  - lambda: |-
+                      ink::staat().status = ink::DAG;
+                      ink::ververs_mask() |= ink::VENSTER;
+                  - script.execute: ververs
+                  - script.execute: venster_sluiten_na_tijd
             # Annuleren / OK
             - if:
                 condition:
                   lambda: return zone == ink::ANNULEER || zone == ink::OK;
                 then:
                   - script.stop: venster_sluiten_na_tijd
+                  - script.stop: wacht_op_details
                   - script.execute:
                       id: zet_status
                       status: !lambda return ink::RUST;

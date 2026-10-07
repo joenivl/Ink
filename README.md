@@ -31,6 +31,10 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
 |---|---|---|---|
 | ![](docs/preview-luisteren.png) | ![](docs/preview-voorstel.png) | ![](docs/preview-notitie.png) | ![](docs/preview-melding.png) |
 
+| Dag (maand) | Details |
+|---|---|
+| ![](docs/preview-dag.png) | ![](docs/preview-details.png) |
+
 *De previews worden gemaakt door de echte tekencode (`esphome/components/ink/ink_kalender.h`),
 zie [Preview en tests](#preview-en-tests).*
 
@@ -164,6 +168,8 @@ verversingen per dag.
 | **Week / Maand** (tabs bovenin) | Wisselen van scherm |
 | **Inspreken** (of de groene knop) | Tik, spreek, wacht. Tik nog een keer om te stoppen. |
 | **Opslaan / Annuleer** | Na het inspreken. Zonder keuze sluit het venster na 3 minuten. |
+| **Afspraak aantikken** (week) | Details: tijd, waar, welke agenda en de omschrijving (haalt HA even op) |
+| **Dag aantikken** (maand) of **"+N meer"** | Alle afspraken van die dag; tik er een aan voor de details |
 | **Notitie aantikken** | Afvinken; een doorgestreepte nog eens aantikken zet hem terug |
 | **HA-knoppen** | Zetten de entiteit aan of uit; zwart betekent aan. |
 | Rechter witte knop | Scherm volledig verversen |

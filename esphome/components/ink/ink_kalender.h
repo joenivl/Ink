@@ -87,6 +87,14 @@ constexpr int VENSTER_KNOP_B = 440;
 constexpr int VENSTER_KNOP_H = 104;
 constexpr int VENSTER_KNOP_Y = VENSTER_Y + VENSTER_H - 144;
 
+// Groot venster voor het dagoverzicht en de details van een afspraak
+constexpr int GROOT_B = 1300;
+constexpr int GROOT_H = 1040;
+constexpr int GROOT_X = (B - GROOT_B) / 2;
+constexpr int GROOT_Y = 130;
+constexpr int GROOT_KNOP_Y = GROOT_Y + GROOT_H - 140;
+constexpr int DAG_REGEL = 66;  // regels in het dagoverzicht, groot genoeg voor een vinger
+
 // Wat er opnieuw getekend moet worden (bitmasker).
 constexpr uint8_t VOL = 1;      // alles, GC16 (mooi grijs, knippert)
 constexpr uint8_t BALK = 2;     // alleen knoppenbalk, DU (snel)
@@ -159,6 +167,13 @@ static const char *const MAAND[] = {"januari", "februari", "maart",     "april",
                                     "juli",    "augustus", "september", "oktober", "november", "december"};
 static const char *const MAAND_KORT[] = {"jan", "feb", "mrt", "apr", "mei", "jun",
                                          "jul", "aug", "sep", "okt", "nov", "dec"};
+
+// "JJJJ-MM-DD"
+inline std::string datum_tekst(const Datum &dt) {
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d", dt.j, dt.m, dt.d);
+  return buf;
+}
 
 inline std::string datum_lang(const Datum &dt) {
   char buf[48];
@@ -240,6 +255,7 @@ struct Afspraak {
   Datum datum;
   std::string tijd;  // "HH:MM", leeg = hele dag
   std::string titel;
+  std::string ruw;  // titel zoals HA hem stuurde (met alle emoji), om details op te vragen
 };
 
 // Regels "JJJJ-MM-DD|HH:MM|titel" of "JJJJ-MM-DD|-|titel" (hele dag),
@@ -267,6 +283,7 @@ inline std::vector<Afspraak> lees_afspraken(const std::string &tekst) {
     af.titel = regel.substr(b + 1);
     if (!af.titel.empty() && af.titel.back() == '\r')
       af.titel.pop_back();
+    af.ruw = af.titel;
     af.titel = zonder_onbekende_iconen(af.titel);
     uit.push_back(af);
   }
@@ -371,7 +388,8 @@ inline std::vector<Weer> lees_weer(const std::string &tekst) {
 
 // ------------------------------------------------------------------ staat ---
 
-enum Status : uint8_t { RUST, LUISTEREN, VERWERKEN, VOORSTEL, MELDING };
+// DAG = overzicht van één dag (vanuit de maand of "+N meer"), DETAILS = één afspraak.
+enum Status : uint8_t { RUST, LUISTEREN, VERWERKEN, VOORSTEL, MELDING, DAG, DETAILS };
 
 enum Zone : int {
   GEEN = -1,
@@ -379,10 +397,13 @@ enum Zone : int {
   KNOP1 = 1,  // KNOP1..KNOP4 = Home Assistant-knoppen
   OPSLAAN = 10,
   ANNULEER = 11,
-  OK = 12,
+  OK = 12,  // ook "Sluiten"
+  TERUG = 13,
   TAB_WEEK = 20,
   TAB_MAAND = 21,
-  NOTITIE0 = 100,  // NOTITIE0 + i = notitie i
+  NOTITIE0 = 100,      // NOTITIE0 + i = notitie i
+  AFSPRAAK0 = 1000,    // AFSPRAAK0 + i = afspraak i (in Staat::afspraken)
+  DAG0 = 100000,       // DAG0 + dagnummer = overzicht van die dag
 };
 
 enum Scherm : uint8_t { SCHERM_WEEK, SCHERM_MAAND };
@@ -394,6 +415,16 @@ enum Slaap : uint8_t { WAKKER, SLAAPT, WORDT_WAKKER };
 struct Voorstel {
   std::string titel, datum, begin, eind, gehoord;
   std::string soort;  // "afspraak" of "notitie"
+};
+
+// Details van een aangetikte afspraak. Titel en tijd zijn er meteen; de rest
+// komt een tel later van Home Assistant (toon_details).
+struct Details {
+  int afspraak{-1};      // index in Staat::afspraken
+  bool geladen{false};   // false = "Even ophalen…"
+  bool van_dag{false};   // geopend vanuit het dagoverzicht: knop "Terug"
+  std::string titel, datum, begin, eind_datum, eind, locatie, omschrijving, kalender;
+  std::string fout;
 };
 
 struct HaKnop {
@@ -415,6 +446,8 @@ struct Staat {
   Scherm scherm{SCHERM_WEEK};
   Voorstel voorstel;
   std::string melding;
+  Datum dag_gekozen;  // voor het dagoverzicht
+  Details details;
   HaKnop knoppen[4];
   float temperatuur{NAN};
   float vochtigheid{NAN};
@@ -435,7 +468,90 @@ inline uint8_t &ververs_mask() {
   return m;
 }
 
-inline bool venster_open(const Staat &s) { return s.status == VOORSTEL || s.status == MELDING; }
+inline bool venster_open(const Staat &s) {
+  return s.status == VOORSTEL || s.status == MELDING || s.status == DAG || s.status == DETAILS;
+}
+
+// Waar wat staat, bijgehouden tijdens het tekenen, zodat een aanraking bij de
+// juiste afspraak of dag uitkomt.
+struct Vak {
+  int x, y, w, h;
+  int zone;
+};
+
+inline std::vector<Vak> &vakken() {  // week en maand
+  static std::vector<Vak> v;
+  return v;
+}
+
+inline std::vector<Vak> &venster_vakken() {  // dagoverzicht
+  static std::vector<Vak> v;
+  return v;
+}
+
+inline Zone afspraak_zone(const Staat &s, const Afspraak *a) {
+  return static_cast<Zone>(AFSPRAAK0 + static_cast<int>(a - s.afspraken.data()));
+}
+
+inline Zone dag_zone(const Datum &d) { return static_cast<Zone>(DAG0 + dagnummer(d)); }
+
+// Afspraak aangetikt: details klaarzetten met wat we al weten.
+inline void open_details(Staat &s, int i) {
+  const Afspraak &a = s.afspraken[i];
+  Details d;
+  d.afspraak = i;
+  d.van_dag = s.status == DAG;
+  d.titel = a.titel;
+  d.datum = datum_tekst(a.datum);
+  d.begin = a.tijd;
+  s.details = d;
+  s.status = DETAILS;
+}
+
+// Antwoord van Home Assistant (toon_details).
+inline void zet_details(Staat &s, const std::string &gevonden, const std::string &titel, const std::string &datum,
+                        const std::string &begin, const std::string &eind_datum, const std::string &eind,
+                        const std::string &locatie, const std::string &omschrijving, const std::string &kalender) {
+  if (s.status != DETAILS || s.details.geladen)
+    return;  // al dicht, of al beantwoord
+  Details &d = s.details;
+  d.geladen = true;
+  if (gevonden != "ja") {
+    d.fout = "Deze afspraak kon ik niet (meer) vinden in de agenda.";
+    return;
+  }
+  d.titel = zonder_onbekende_iconen(titel);
+  d.datum = datum;
+  d.begin = begin;
+  d.eind_datum = eind_datum;
+  d.eind = eind;
+  d.locatie = zonder_onbekende_iconen(locatie);
+  d.omschrijving = zonder_onbekende_iconen(omschrijving);
+  d.kalender = zonder_onbekende_iconen(kalender);
+}
+
+inline std::string klein_begin(std::string s) {
+  if (!s.empty() && s[0] >= 'A' && s[0] <= 'Z')
+    s[0] = static_cast<char>(s[0] - 'A' + 'a');
+  return s;
+}
+
+// "Woensdag 7 oktober · 16:00 – 17:00", over meer dagen
+// "Vrijdag 9 oktober 18:00 – zondag 11 oktober 12:00".
+inline std::string details_wanneer(const Details &d) {
+  Datum van, tot;
+  if (!lees_datum(d.datum, van))
+    return d.datum;
+  const bool meer_dagen = lees_datum(d.eind_datum, tot) && !(tot == van);
+  if (d.begin.empty()) {
+    if (meer_dagen)
+      return datum_lang(van) + " t/m " + klein_begin(datum_lang(tot)) + "  ·  hele dag";
+    return datum_lang(van) + "  ·  hele dag";
+  }
+  if (meer_dagen)
+    return datum_lang(van) + " " + d.begin + " – " + klein_begin(datum_lang(tot)) + (d.eind.empty() ? "" : " " + d.eind);
+  return datum_lang(van) + "  ·  " + d.begin + (d.eind.empty() ? "" : " – " + d.eind);
+}
 
 struct Fonts {
   BaseFont *klein;    // maandvakjes
@@ -773,9 +889,11 @@ inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
         char meer[24];
         std::snprintf(meer, sizeof(meer), "+%d meer", static_cast<int>(lijst.size() - n));
         tekst(it, bx, y - 4, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, meer);
+        vakken().push_back({bx, y - 10, bw, 50, dag_zone(dag)});  // tik = hele dag
         break;
       }
       week_afspraak(it, f, *lijst[n], bx, y, bw, true);
+      vakken().push_back({bx, y - 6, bw, h + 12, afspraak_zone(s, lijst[n])});
       y += h + 12;
     }
   }
@@ -825,6 +943,7 @@ inline void teken_maand(Display &it, const Staat &s, const Fonts &f) {
       tekst(it, x + 10, y + 1, f.kop, deze_maand ? ZWART : GRIJS, WIT, TextAlign::TOP_LEFT, buf);
     }
 
+    vakken().push_back({x, y, MAAND_KOL, rij_h, dag_zone(dag)});
     const Color kleur = deze_maand ? ZWART : GRIJS_DONKER;
     const int max_regels = (rij_h - 44) / REGEL;
     std::vector<const Afspraak *> lijst;
@@ -1000,19 +1119,127 @@ inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
   }
 }
 
-inline void venster_knop(Display &it, const Fonts &f, int x, const char *label, bool gevuld) {
+inline void venster_knop(Display &it, const Fonts &f, int x, const char *label, bool gevuld,
+                         int y = VENSTER_KNOP_Y) {
   const Color a = gevuld ? ZWART : WIT;
-  it.filled_rectangle(x, VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H, a);
-  kader(it, x, VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H, 4, ZWART);
-  tekst(it, x + VENSTER_KNOP_B / 2, VENSTER_KNOP_Y + 26, f.kop, gevuld ? WIT : ZWART, a, TextAlign::TOP_CENTER,
-        label);
+  it.filled_rectangle(x, y, VENSTER_KNOP_B, VENSTER_KNOP_H, a);
+  kader(it, x, y, VENSTER_KNOP_B, VENSTER_KNOP_H, 4, ZWART);
+  tekst(it, x + VENSTER_KNOP_B / 2, y + 26, f.kop, gevuld ? WIT : ZWART, a, TextAlign::TOP_CENTER, label);
 }
 
 inline int opslaan_x() { return VENSTER_X + 60; }
 inline int annuleer_x() { return VENSTER_X + VENSTER_B - 60 - VENSTER_KNOP_B; }
 inline int ok_x() { return VENSTER_X + (VENSTER_B - VENSTER_KNOP_B) / 2; }
 
+// Knoppen onder in het grote venster: "Sluiten" (en "Terug" bij details vanuit een dag).
+inline bool met_terug(const Staat &s) { return s.status == DETAILS && s.details.van_dag; }
+inline int sluiten_x(const Staat &s) {
+  return met_terug(s) ? GROOT_X + GROOT_B - 60 - VENSTER_KNOP_B : GROOT_X + (GROOT_B - VENSTER_KNOP_B) / 2;
+}
+inline int terug_x() { return GROOT_X + 60; }
+
+// Alles in zwart/wit: het venster wordt met de snelle DU-modus getekend.
+inline void teken_dagoverzicht(Display &it, const Staat &s, const Fonts &f) {
+  const int x = GROOT_X + 60, w = GROOT_B - 120;
+  tekst(it, x, GROOT_Y + 30, f.groot, ZWART, WIT, TextAlign::TOP_LEFT, datum_lang(s.dag_gekozen));
+  std::vector<const Afspraak *> lijst;
+  for (const auto &a : s.afspraken)
+    if (a.datum == s.dag_gekozen)
+      lijst.push_back(&a);
+  int y = GROOT_Y + 120;
+  it.filled_rectangle(x, y, w, 2, ZWART);
+  if (lijst.empty()) {
+    tekst(it, x, y + 20, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, "Geen afspraken");
+    return;
+  }
+  const int max = (GROOT_KNOP_Y - 30 - y) / DAG_REGEL;
+  for (size_t n = 0; n < lijst.size() && static_cast<int>(n) < max; n++) {
+    if (static_cast<int>(n) == max - 1 && lijst.size() > n + 1) {
+      char buf[24];
+      std::snprintf(buf, sizeof(buf), "+%d meer", static_cast<int>(lijst.size() - n));
+      tekst(it, x + 8, y + 14, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, buf);
+      break;
+    }
+    const Afspraak &a = *lijst[n];
+    const std::string tijd = a.tijd.empty() ? "hele dag" : a.tijd;
+    tekst(it, x + 8, y + 16, f.vet, ZWART, WIT, TextAlign::TOP_LEFT, tijd);
+    tekst(it, x + 150, y + 12, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, afkappen(it, f.kop, a.titel, w - 200));
+    // Pijltje: tik voor details
+    for (int d = -1; d <= 1; d++) {
+      it.line(x + w - 30 + d, y + 20, x + w - 16 + d, y + DAG_REGEL / 2, ZWART);
+      it.line(x + w - 16 + d, y + DAG_REGEL / 2, x + w - 30 + d, y + DAG_REGEL - 20, ZWART);
+    }
+    venster_vakken().push_back({x, y, w, DAG_REGEL, afspraak_zone(s, &a)});
+    y += DAG_REGEL;
+    it.horizontal_line(x, y, w, ZWART);
+  }
+}
+
+inline void teken_details(Display &it, const Staat &s, const Fonts &f) {
+  const Details &d = s.details;
+  const int x = GROOT_X + 60, w = GROOT_B - 120;
+  int y = GROOT_Y + 30;
+  for (const auto &r : omloop(it, f.groot, d.titel, w, w, 2)) {
+    tekst(it, x, y, f.groot, ZWART, WIT, TextAlign::TOP_LEFT, r);
+    y += 66;
+  }
+  y += 6;
+  for (const auto &r : omloop(it, f.kop, details_wanneer(d), w, w, 2)) {
+    tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, r);
+    y += 48;
+  }
+  y += 14;
+  it.filled_rectangle(x, y, w, 2, ZWART);
+  y += 22;
+  if (!d.geladen || !d.fout.empty()) {
+    tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, d.geladen ? d.fout : "Even ophalen…");
+    return;
+  }
+  constexpr int REGEL = 38;
+  auto veld = [&](const char *label, const std::string &waarde) {
+    if (waarde.empty())
+      return;
+    const int lb = breedte(it, f.vet, label) + 14;
+    const auto regels = omloop(it, f.normaal, waarde, w - lb, w - lb, 2);
+    tekst(it, x, y, f.vet, ZWART, WIT, TextAlign::TOP_LEFT, label);
+    for (const auto &r : regels) {
+      tekst(it, x + lb, y, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, r);
+      y += REGEL;
+    }
+    y += 8;
+  };
+  veld("Waar:", d.locatie);
+  veld("Agenda:", d.kalender);
+  if (!d.omschrijving.empty()) {
+    y += 10;
+    const int max = std::max(1, (GROOT_KNOP_Y - 30 - y) / REGEL);
+    for (const auto &r : omloop(it, f.normaal, d.omschrijving, w, w, max)) {
+      tekst(it, x, y, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, r);
+      y += REGEL;
+    }
+  }
+  if (d.locatie.empty() && d.kalender.empty() && d.omschrijving.empty())
+    tekst(it, x, y, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, "Geen verdere details.");
+}
+
+inline void teken_groot_venster(Display &it, const Staat &s, const Fonts &f) {
+  venster_vakken().clear();
+  it.filled_rectangle(GROOT_X, GROOT_Y, GROOT_B, GROOT_H, WIT);
+  kader(it, GROOT_X, GROOT_Y, GROOT_B, GROOT_H, 6, ZWART);
+  if (s.status == DAG)
+    teken_dagoverzicht(it, s, f);
+  else
+    teken_details(it, s, f);
+  if (met_terug(s))
+    venster_knop(it, f, terug_x(), "Terug", false, GROOT_KNOP_Y);
+  venster_knop(it, f, sluiten_x(s), "Sluiten", true, GROOT_KNOP_Y);
+}
+
 inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
+  if (s.status == DAG || s.status == DETAILS) {
+    teken_groot_venster(it, s, f);
+    return;
+  }
   it.filled_rectangle(VENSTER_X, VENSTER_Y, VENSTER_B, VENSTER_H, WIT);
   kader(it, VENSTER_X, VENSTER_Y, VENSTER_B, VENSTER_H, 6, ZWART);
   const int x = VENSTER_X + 60;
@@ -1066,6 +1293,7 @@ inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
   nep[2] = f.nep_vet ? f.groot : nullptr;
   if (mask & VOL) {
     it.fill(WIT);
+    vakken().clear();
     teken_kop(it, s, f);
     if (s.scherm == SCHERM_MAAND) {
       teken_maand(it, s, f);
@@ -1100,7 +1328,19 @@ inline bool binnen(int x, int y, int bx, int by, int bw, int bh) {
 inline Zone raak(const Staat &s, int x, int y) {
   if (s.slaap != WAKKER)
     return GEEN;  // eerst wakker worden
-  if (venster_open(s)) {
+  if (s.status == DAG || s.status == DETAILS) {
+    if (binnen(x, y, sluiten_x(s), GROOT_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H))
+      return OK;
+    if (met_terug(s) && binnen(x, y, terug_x(), GROOT_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H))
+      return TERUG;
+    if (s.status == DAG)
+      for (const Vak &v : venster_vakken())
+        if (binnen(x, y, v.x, v.y, v.w, v.h))
+          return static_cast<Zone>(v.zone);
+    if (binnen(x, y, GROOT_X, GROOT_Y, GROOT_B, GROOT_H))
+      return GEEN;
+  }
+  if (venster_open(s) && s.status != DAG && s.status != DETAILS) {
     if (s.status == MELDING)
       return binnen(x, y, ok_x(), VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H) ? OK : GEEN;
     if (binnen(x, y, opslaan_x(), VENSTER_KNOP_Y, VENSTER_KNOP_B, VENSTER_KNOP_H))
@@ -1117,6 +1357,23 @@ inline Zone raak(const Staat &s, int x, int y) {
     const int aantal = static_cast<int>(s.notities.size());
     if (i >= 0 && i < aantal && !(i == NOTITIE_MAX - 1 && aantal > NOTITIE_MAX))  // niet "+N meer"
       return s.notities[i].uid.empty() ? GEEN : static_cast<Zone>(NOTITIE0 + i);
+  }
+  // Afspraken (week) en dagen (maand). Net ernaast getikt? Dan de dichtstbijzijnde
+  // afspraak in dezelfde kolom, tot 20 pixels verderop.
+  if (!venster_open(s)) {
+    const Vak *best = nullptr;
+    int afstand = 21;
+    for (const Vak &v : vakken()) {
+      if (x < v.x || x >= v.x + v.w)
+        continue;
+      const int a = y < v.y ? v.y - y : (y >= v.y + v.h ? y - (v.y + v.h - 1) : 0);
+      if (a < afstand) {
+        afstand = a;
+        best = &v;
+      }
+    }
+    if (best != nullptr)
+      return static_cast<Zone>(best->zone);
   }
   // Iets ruimere vlakken in de balk; vingers zijn geen stylus.
   if (binnen(x, y, MARGE - 10, KNOP_Y - 14, SPREEK_B + 18, KNOP_H + 28))

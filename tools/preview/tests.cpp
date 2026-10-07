@@ -154,6 +154,52 @@ int main() {
   assert(notitie_op(MARGE + 20, NOTITIE_TOP - 30) == -1);
   assert(notitie_op(MARGE + 20, NOTITIE_TOP + NOTITIE_PER_KOLOM * NOTITIE_REGEL) == -1);
 
+  // Details van een afspraak
+  {
+    Staat s;
+    s.afspraken = lees_afspraken("2026-10-08|16:00|Zwemles 🏊\n2026-10-09|-|Weekend weg");
+    assert(s.afspraken[0].ruw == "Zwemles 🏊");
+    open_details(s, 0);
+    assert(s.status == DETAILS && !s.details.geladen && !s.details.van_dag && s.details.begin == "16:00");
+    assert(details_wanneer(s.details) == "Donderdag 8 oktober  ·  16:00");
+    zet_details(s, "ja", "Zwemles", "2026-10-08", "16:00", "2026-10-08", "16:45", "Zwembad", "", "Gezin");
+    assert(s.details.geladen && s.details.locatie == "Zwembad");
+    assert(details_wanneer(s.details) == "Donderdag 8 oktober  ·  16:00 – 16:45");
+    zet_details(s, "nee", "", "", "", "", "", "", "", "");  // tweede antwoord: genegeerd
+    assert(s.details.fout.empty());
+    Details d;
+    d.datum = "2026-10-09";
+    d.eind_datum = "2026-10-11";
+    assert(details_wanneer(d) == "Vrijdag 9 oktober t/m zondag 11 oktober  ·  hele dag");
+    d.begin = "18:00";
+    d.eind = "12:00";
+    assert(details_wanneer(d) == "Vrijdag 9 oktober 18:00 – zondag 11 oktober 12:00");
+    // Niet gevonden
+    s.status = DAG;
+    open_details(s, 1);
+    assert(s.details.van_dag && met_terug(s));
+    zet_details(s, "nee", "", "", "", "", "", "", "", "");
+    assert(s.details.geladen && !s.details.fout.empty());
+    // Antwoord na sluiten: genegeerd
+    s.status = RUST;
+    zet_details(s, "ja", "X", "2026-10-08", "", "", "", "", "", "");
+    assert(s.status == RUST);
+  }
+
+  // Aanraken van afspraken: in het vak, of tot 20 pixels ernaast in dezelfde kolom
+  {
+    Staat s;
+    vakken() = {{100, 200, 240, 60, AFSPRAAK0 + 0}, {100, 272, 240, 60, AFSPRAAK0 + 1}};
+    assert(raak(s, 150, 230) == AFSPRAAK0);
+    assert(raak(s, 150, 300) == AFSPRAAK0 + 1);
+    assert(raak(s, 150, 345) == AFSPRAAK0 + 1);  // 14 px eronder
+    assert(raak(s, 150, 400) == GEEN);           // te ver
+    assert(raak(s, 400, 230) == GEEN);           // andere kolom
+    s.status = MELDING;
+    assert(raak(s, 150, 230) != AFSPRAAK0);  // onder een venster: niet
+    vakken().clear();
+  }
+
   // Spaarstand: slaapduur (elke 30 min, 's nachts 23-6 door tot 6:00)
   assert(slaapduur_ms(14, 0, 30, 23, 6) == 30u * 60 * 1000);
   assert(slaapduur_ms(23, 0, 30, 23, 6) == 7u * 60 * 60 * 1000);

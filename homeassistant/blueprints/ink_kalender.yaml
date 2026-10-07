@@ -5,7 +5,7 @@ blueprint:
     en zet ingesproken zinnen om in een afspraak of notitie. Het scherm vraagt
     eerst om bevestiging; pas na 'Opslaan' komt het in de kalender of takenlijst.
     Notities die op het scherm worden aangetikt, worden afgevinkt (nog eens
-    tikken zet ze terug).
+    tikken zet ze terug). Een aangetikte afspraak toont de details.
 
 
     Vereist: de ESPHome-config esphome/ink-kalender.yaml (apparaatnaam
@@ -99,6 +99,9 @@ triggers:
   - trigger: event
     event_type: esphome.ink_afvinken
     id: afvinken
+  - trigger: event
+    event_type: esphome.ink_details
+    id: details
 
 variables:
   kalenders: !input kalenders
@@ -298,6 +301,65 @@ actions:
                   {% set e = s + timedelta(minutes=standaard_duur | int) %}
                 {% endif %}
                 {{ e.strftime('%Y-%m-%d %H:%M:%S') }}
+
+  # ------------------------------------------------ details van een aangetikte afspraak
+  # Het scherm stuurt dag, begintijd ('-' = hele dag of een vervolgdag) en de
+  # titel zoals hij in de agenda-regels stond; zoek die afspraak op die dag.
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id == 'details' }}"
+    then:
+      - variables:
+          gevraagd: "{{ trigger.event.data }}"
+      - action: calendar.get_events
+        continue_on_error: true
+        target:
+          entity_id: "{{ kalenders }}"
+        data:
+          start_date_time: "{{ gevraagd.datum }} 00:00:00"
+          end_date_time: >-
+            {{ (strptime(gevraagd.datum, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d') }} 00:00:00
+        response_variable: dag
+      - variables:
+          afspraak: >-
+            {%- set ns = namespace(e=none) -%}
+            {%- for kal, data in (dag | default({})).items() -%}
+              {%- set naam = state_attr(kal, 'friendly_name') or kal -%}
+              {%- for e in data.events if ns.e is none -%}
+                {%- set titel = (e.summary | default('') | replace('\n', ' ') | trim) -%}
+                {%- if kalendernaam_tonen -%}{%- set titel = naam ~ ': ' ~ titel -%}{%- endif -%}
+                {%- set tijd = as_local(as_datetime(e.start)).strftime('%H:%M') if 'T' in e.start else '-' -%}
+                {%- if titel == gevraagd.titel and (gevraagd.tijd == '-' or gevraagd.tijd == tijd) -%}
+                  {%- set ns.e = dict(e, kalender=naam) -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endfor -%}
+            {{ ns.e if ns.e is not none else {} }}
+      - action: esphome.ink_kalender_toon_details
+        continue_on_error: true
+        data:
+          gevonden: "{{ 'ja' if afspraak else 'nee' }}"
+          titel: "{{ afspraak.summary | default('') }}"
+          datum: >-
+            {%- if not afspraak -%}
+            {%- elif 'T' in afspraak.start -%}{{ as_local(as_datetime(afspraak.start)).strftime('%Y-%m-%d') }}
+            {%- else -%}{{ afspraak.start }}{%- endif -%}
+          begin: >-
+            {{ as_local(as_datetime(afspraak.start)).strftime('%H:%M') if afspraak and 'T' in afspraak.start else '' }}
+          # Hele dag: HA geeft de dag ná de laatste dag als einde.
+          eind_datum: >-
+            {%- if not afspraak or not afspraak.end -%}
+            {%- elif 'T' in afspraak.end -%}{{ as_local(as_datetime(afspraak.end)).strftime('%Y-%m-%d') }}
+            {%- else -%}{{ (strptime(afspraak.end, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d') }}{%- endif -%}
+          eind: >-
+            {{ as_local(as_datetime(afspraak.end)).strftime('%H:%M') if afspraak and 'T' in (afspraak.end or '') else '' }}
+          locatie: "{{ (afspraak.location | default('') or '') | replace('\n', ', ') | trim }}"
+          # Zonder HTML (Google zet daar soms opmaak in), op één regel, hooguit 600 tekens.
+          omschrijving: >-
+            {{ ((afspraak.description | default('') or '') | regex_replace('<[^>]*>', ' ')
+               | replace('&nbsp;', ' ') | replace('&amp;', '&') | regex_replace('\\s+', ' ') | trim)[:600] }}
+          kalender: "{{ afspraak.kalender | default('') }}"
+      - stop: Details verstuurd
 
   # ------------------------------------------------ notitie (terug)gezet op het scherm
   - if:
