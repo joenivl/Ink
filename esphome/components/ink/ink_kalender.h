@@ -12,7 +12,13 @@
 #ifdef INK_HOST
 #include "esphome_stub.h"
 #else
-#include "esphome.h"
+// Geen "esphome.h": ESPHome zet dit bestand zelf in esphome.h (het is een
+// external component), dus alleen wat we echt gebruiken.
+#include "esphome/components/display/display.h"
+#include "esphome/components/i2c/i2c_bus.h"
+#include "esphome/core/color.h"
+#include "esphome/core/hal.h"
+#include "esphome/core/log.h"
 #include <ctime>
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
@@ -764,7 +770,7 @@ inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
       const int h = week_afspraak(it, f, *lijst[n], bx, y, bw, false);
       const bool laatste = n + 1 == lijst.size();
       if (y + h > WEEK_EIND - (laatste ? 0 : 34)) {
-        char meer[16];
+        char meer[24];
         std::snprintf(meer, sizeof(meer), "+%d meer", static_cast<int>(lijst.size() - n));
         tekst(it, bx, y - 4, f.vet, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, meer);
         break;
@@ -1182,21 +1188,16 @@ inline bool neem_weer_over(WeerGeheugen &g, const std::string &nieuw, int vak) {
   return true;
 }
 
-#ifdef INK_HOST
-[[maybe_unused]] static WeerGeheugen rtc_weer = {};
-#else
-// Blijft bewaard tijdens deep sleep (RTC-geheugen), niet na stroomverlies.
-static RTC_DATA_ATTR WeerGeheugen rtc_weer = {};
-#endif
-
 #ifndef INK_HOST
-// Blijft bewaard tijdens deep sleep (RTC-geheugen), niet na stroomverlies.
-static RTC_DATA_ATTR uint32_t rtc_inhoud_hash = 0;
-static RTC_DATA_ATTR time_t rtc_slaap_begin = 0;
-static RTC_DATA_ATTR uint8_t rtc_snelle_touch_wekkers = 0;
+// Blijven bewaard tijdens deep sleep (RTC-geheugen), niet na stroomverlies.
+// Gedefinieerd in ink_kalender.cpp: dit bestand komt in elk bronbestand.
+extern WeerGeheugen rtc_weer;
+extern uint32_t rtc_inhoud_hash;
+extern time_t rtc_slaap_begin;
+extern uint8_t rtc_snelle_touch_wekkers;
 // Laatst gemeten accupercentage, zodat het na het wekken meteen weer op het
 // scherm staat (de eerste meting volgt pas een paar seconden later).
-static RTC_DATA_ATTR float rtc_accu = NAN;
+extern float rtc_accu;
 
 enum Wekreden : int { WEK_STROOM = 0, WEK_TIMER = 1, WEK_GEBRUIKER = 2 };
 

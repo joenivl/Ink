@@ -13,7 +13,7 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
 - **Iconen in titels**: een emoji in een afspraak of notitie ("🎂 Elise jarig") komt als
   zwart-wit icoon op het scherm. Er zitten ongeveer 150 veelgebruikte iconen in (alleen in het font van titels en notities, meer past niet in het geheugen) (verjaardag,
   sport, school, dokter, reizen, feestdagen…); andere emoji worden weggelaten. De lijst
-  staat bij `font:` in `ink-kalender.yaml` en als `ICONEN` in `ink_kalender.h`.
+  staat bij `font:` in `esphome/ink-kalender.yaml` en als `ICONEN` in `ink_kalender.h`.
 - **Knoppen**: vier knoppen om lampen, scripts en dergelijke in HA aan of uit te zetten.
 - **Inspreken** (alleen via de knop, geen wake word): tik op de knop en zeg bijvoorbeeld
   "zaterdag half drie verjaardag oma" (afspraak) of "notitie cadeautje voor Faye" (notitie).
@@ -30,7 +30,7 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
 |---|---|---|---|
 | ![](docs/preview-luisteren.png) | ![](docs/preview-voorstel.png) | ![](docs/preview-notitie.png) | ![](docs/preview-melding.png) |
 
-*De previews worden gemaakt door de echte tekencode (`esphome/ink_kalender.h`),
+*De previews worden gemaakt door de echte tekencode (`esphome/components/ink/ink_kalender.h`),
 zie [Preview en tests](#preview-en-tests).*
 
 ## Zo werkt het
@@ -56,10 +56,12 @@ zie [Preview en tests](#preview-en-tests).*
 
 | Pad | Wat |
 |---|---|
-| `esphome/ink-kalender.yaml` | ESPHome-config voor het scherm |
-| `esphome/ink_kalender.h` | Layout, kalenderlogica en touchvlakken (C++, zie hieronder) |
+| `esphome/ha/ink-kalender.yaml` | Het enige ESPHome-bestand dat je in HA zet: je instellingen en secrets, de rest komt van GitHub |
+| `esphome/ink-kalender.yaml` | ESPHome-config voor het scherm (wordt als package van GitHub gehaald) |
+| `esphome/components/ink/` | Layout, kalenderlogica en touchvlakken (C++, zie hieronder), als external component |
 | `esphome/secrets.example.yaml` | Voorbeeld voor `secrets.yaml` |
 | `homeassistant/blueprints/ink_kalender.yaml` | Blueprint: agenda naar het scherm, spraak naar afspraak |
+| `homeassistant/packages/ink.yaml` | Haalt de blueprint elke nacht van GitHub |
 | `tools/preview/` | Tests en PNG-previews zonder hardware |
 
 ## Installatie
@@ -94,16 +96,27 @@ Nodig: Home Assistant **2025.4 of nieuwer** met de **ESPHome Device Builder**-ad
 
 ### 2. Scherm flashen
 
-1. Zet in de ESPHome Builder-add-on je secrets (wifi en API-sleutel),
-   zie `esphome/secrets.example.yaml`.
-2. Zet `ink-kalender.yaml` en `ink_kalender.h` samen in `/config/esphome/`. Dat kan
-   via de *File editor*- of *Studio Code Server*-add-on.
-3. Pas bovenin `ink-kalender.yaml` de `substitutions` aan: de vier knoppen
-   (`knopN_naam` en `knopN_entiteit`; een lege naam verbergt de knop) en eventueel
-   `lettertype` (elk Google Font; zie `docs/fonts-vergelijking.png`).
+De repo is privé. ESPHome en HA halen alles zelf van GitHub met een token; je
+zet maar twee bestanden één keer in HA.
+
+1. **GitHub-token**: maak op GitHub een *fine-grained personal access token*
+   (Settings → Developer settings), alleen voor deze repo, met
+   *Contents: Read-only*. Kies een lange geldigheid en zet een herinnering:
+   als het verloopt, mislukt het bijwerken (HA geeft dan een melding).
+2. Zet in de ESPHome Builder-add-on je secrets (wifi, API-sleutel en het token als
+   `github_token`), zie `esphome/secrets.example.yaml`.
+3. Zet `esphome/ha/ink-kalender.yaml` in HA als `/config/esphome/ink-kalender.yaml`
+   (bijvoorbeeld via de *File editor*-add-on). Pas daarin je instellingen aan: de
+   vier knoppen (`knopN_naam` en `knopN_entiteit`; een lege naam verbergt de knop) en
+   eventueel `lettertype` (elk Google Font; zie `docs/fonts-vergelijking.png`). Alle
+   instellingen staan bovenin `esphome/ink-kalender.yaml`.
 4. Installeer. De eerste keer moet dat via USB-C vanaf een computer (Chrome of Edge):
    *Install → Manual download*, daarna flashen via <https://web.esphome.io>.
    Daarna gaan updates draadloos.
+
+**Bijwerken:** in de ESPHome Builder bij Ink kalender op **Install** klikken. Hij
+haalt dan de nieuwste versie van `main`. Een branch uitproberen? Zet in je
+`ink-kalender.yaml` de branchnaam bij `ink_versie` én bij `ref`.
 
 ### 3. Koppelen
 
@@ -115,10 +128,20 @@ Nodig: Home Assistant **2025.4 of nieuwer** met de **ESPHome Device Builder**-ad
 
 ### 4. Blueprint
 
-De repo is privé, dus zet je het bestand met de hand in HA: maak met de
-*File editor*-add-on `/config/blueprints/automation/ink/ink_kalender.yaml` aan, plak
-de inhoud van `homeassistant/blueprints/ink_kalender.yaml` en kies bij
-Automatiseringen → Blueprints *Blueprints opnieuw laden* (of herstart HA).
+1. Zet in `configuration.yaml` (als dat er nog niet staat):
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+2. Zet `homeassistant/packages/ink.yaml` in HA als `/config/packages/ink.yaml` en
+   herstart HA.
+3. Bij het starten haalt HA de blueprint op (met het token uit stap 2.2). Hij staat
+   dan bij Automatiseringen → Blueprints als *Ink kalender*.
+
+Daarna gaat het vanzelf: elke nacht om 4:00 haalt HA de nieuwste blueprint en
+herlaadt de automatiseringen als er iets veranderd is. Meteen bijwerken kan met
+het script **Ink bijwerken**. Lukt het ophalen niet, dan blijft de oude blueprint
+staan en krijg je een melding in HA.
 
 Maak daarna een automatisering van de blueprint. Je kiest daarin de kalenders,
 de kalender voor nieuwe afspraken, eventuele takenlijsten, de AI-taak en
@@ -282,21 +305,16 @@ pip install pillow
 python3 tools/preview/render.py
 ```
 
-Dit compileert `ink_kalender.h` tegen een nagebootste ESPHome-display, draait de
+Dit compileert `esphome/components/ink/ink_kalender.h` tegen een nagebootste ESPHome-display, draait de
 tests in `tools/preview/tests.cpp` en schrijft `docs/preview-*.png`. Voorbeelddata
 staat in `tools/preview/preview.cpp`.
 
 ## Status
 
-Getest zonder hardware:
-- `esphome config` slaagt met ESPHome 2026.9.1.
-- `ink_kalender.h` compileert tegen de echte ESPHome-display-headers.
-- De datum- en parsetests slagen.
+- Werkt op het apparaat (week, maand, inspreken, notities, spaarstand, weer).
+- Een volledige firmware-build slaagt met ESPHome 2026.9.1 (flash 82,6%).
+- De datum-, parse- en weertests slagen.
 - De blueprint-templates zijn doorgerekend met voorbeelddata.
-
-Nog niet getest:
-- een volledige firmware-build en de werking op het apparaat zelf;
-- de touch-oriëntatie en de microfoongevoeligheid (zie *Problemen oplossen*).
 
 ## Ideeën voor later
 
