@@ -1008,6 +1008,10 @@ script:
                   - script.execute:
                       id: geluid
                       soort: 0  # tik
+                  # Het tikje eerst laten afspelen: het geluid loopt via de
+                  # hoofdlus, en die staat stil zolang het scherm ververst. Anders
+                  # komt het tikje pas na het tekenen (of klinkt het dan te lang).
+                  - delay: 60ms
             # Tabs
             - if:
                 condition:
