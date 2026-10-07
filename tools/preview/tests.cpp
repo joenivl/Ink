@@ -159,6 +159,10 @@ int main() {
     Staat s;
     s.afspraken = lees_afspraken("2026-10-08|16:00|Zwemles 🏊\n2026-10-09|-|Weekend weg");
     assert(s.afspraken[0].ruw == "Zwemles 🏊");
+    assert(s.afspraken[0].id.empty());
+    auto met_id = lees_afspraken("2026-10-08~3f9a2c1b7d4e|16:00|Zwemles\n2026-10-09~|-|Leeg");
+    assert(met_id.size() == 2 && met_id[0].id == "3f9a2c1b7d4e" && met_id[0].datum == (Datum{2026, 10, 8}));
+    assert(met_id[0].tijd == "16:00" && met_id[0].titel == "Zwemles" && met_id[1].id.empty());
     open_details(s, 0);
     assert(s.status == DETAILS && !s.details.geladen && !s.details.van_dag && s.details.begin == "16:00");
     assert(details_wanneer(s.details) == "Donderdag 8 oktober  ·  16:00");

@@ -256,10 +256,12 @@ struct Afspraak {
   std::string tijd;  // "HH:MM", leeg = hele dag
   std::string titel;
   std::string ruw;  // titel zoals HA hem stuurde (met alle emoji), om details op te vragen
+  std::string id;   // vaste id van de afspraak (van de blueprint), om details op te vragen
 };
 
 // Regels "JJJJ-MM-DD|HH:MM|titel" of "JJJJ-MM-DD|-|titel" (hele dag),
-// gescheiden door '\n'. Zo stuurt de Home Assistant-blueprint ze.
+// gescheiden door '\n'. Zo stuurt de Home Assistant-blueprint ze. Achter de
+// datum kan "~id" staan; oudere firmware leest daar gewoon overheen.
 inline std::vector<Afspraak> lees_afspraken(const std::string &tekst) {
   std::vector<Afspraak> uit;
   size_t pos = 0;
@@ -277,6 +279,9 @@ inline std::vector<Afspraak> lees_afspraken(const std::string &tekst) {
     Afspraak af;
     if (!lees_datum(regel.substr(0, a), af.datum))
       continue;
+    const size_t tilde = regel.find('~');
+    if (tilde < a)
+      af.id = regel.substr(tilde + 1, a - tilde - 1);
     af.tijd = regel.substr(a + 1, b - a - 1);
     if (af.tijd == "-")
       af.tijd.clear();

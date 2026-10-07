@@ -1116,6 +1116,7 @@ script:
                           const auto &a = ink::staat().afspraken[zone - ink::AFSPRAAK0];
                           return a.tijd.empty() ? std::string("-") : a.tijd;
                         titel: !lambda return ink::staat().afspraken[zone - ink::AFSPRAAK0].ruw;
+                        id: !lambda return ink::staat().afspraken[zone - ink::AFSPRAAK0].id;
                   - lambda: |-
                       ink::open_details(ink::staat(), zone - ink::AFSPRAAK0);
                       ink::ververs_mask() |= ink::VENSTER | ink::BALK;
