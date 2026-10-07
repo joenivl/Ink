@@ -747,13 +747,13 @@ inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
     char buf[24];
     std::snprintf(buf, sizeof(buf), "%d %s", dag.d, MAAND[dag.m - 1]);
     tekst(it, x + 14, WEEK_Y + 40, f.klein, kop_tekst, kop_achter, TextAlign::TOP_LEFT, buf);
-    // Weer alleen voor vandaag en later; een verwachting voor gisteren klopt niet meer.
-    if (dagnummer(dag) >= dagnummer(s.vandaag))
-      for (const auto &weer : s.weer)
-        if (weer.datum == dag) {
-          teken_dagweer(it, weer, x + w, f, is_vandaag ? GRIJS : GRIJS_DONKER, kop_achter);
-          break;
-        }
+    // Voorbije dagen (de laatste verwachting, uit het geheugen) iets lichter.
+    const bool voorbij = s.tijd_geldig && dagnummer(dag) < dagnummer(s.vandaag);
+    for (const auto &weer : s.weer)
+      if (weer.datum == dag) {
+        teken_dagweer(it, weer, x + w, f, is_vandaag || voorbij ? GRIJS : GRIJS_DONKER, kop_achter);
+        break;
+      }
 
     if (i > 0)
       it.vertical_line(x - 5, WEEK_Y + WEEK_KOP_H + 8, WEEK_EIND - WEEK_Y - WEEK_KOP_H - 8, GRIJS);
@@ -1181,10 +1181,30 @@ inline int weer_vak(int dag, int uur, int elke_uur) {
   return dag * 100 + uur / std::max(1, elke_uur);
 }
 
+// Home Assistant stuurt alleen vandaag en later. Voor de dagen van deze week
+// die al voorbij zijn, houden we de regels uit het oude weer: de laatste
+// verwachting voor die dag. In een nieuwe week begint het opnieuw.
+inline std::string met_verleden(const std::string &oud, const std::string &nieuw, int vandaag) {
+  if (nieuw.empty() || vandaag < 0)
+    return nieuw;
+  const int maandag = vandaag - weekdag(van_dagnummer(vandaag));
+  std::string verleden;
+  for (const auto &regel : lees_regels(oud)) {
+    Datum d;
+    if (!lees_datum(regel, d))
+      continue;
+    const int n = dagnummer(d);
+    if (n >= maandag && n < vandaag && nieuw.find(regel.substr(0, 10)) == std::string::npos)
+      verleden += regel + "\n";
+  }
+  return verleden + nieuw;
+}
+
 // Neemt `nieuw` over als er nog geen weer staat of als het een nieuw tijdvak
-// is. Geeft true als het getoonde weer verandert.
+// is (en houdt de voorbije dagen van deze week). Geeft true als het getoonde
+// weer verandert.
 inline bool neem_weer_over(WeerGeheugen &g, const std::string &nieuw, int vak) {
-  std::string t = nieuw;
+  std::string t = met_verleden(g.tekst, nieuw, vak >= 0 ? vak / 100 : -1);
   if (t.size() >= sizeof(g.tekst)) {
     t.resize(sizeof(g.tekst) - 1);
     t.erase(t.rfind('\n') == std::string::npos ? 0 : t.rfind('\n'));  // geen halve regel
