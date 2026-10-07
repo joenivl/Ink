@@ -4,7 +4,8 @@ blueprint:
     Stuurt agenda's en notities naar de Ink e-paper kalender (reTerminal E1003)
     en zet ingesproken zinnen om in een afspraak of notitie. Het scherm vraagt
     eerst om bevestiging; pas na 'Opslaan' komt het in de kalender of takenlijst.
-    Notities die op het scherm worden aangetikt, worden afgevinkt.
+    Notities die op het scherm worden aangetikt, worden afgevinkt (nog eens
+    tikken zet ze terug).
 
 
     Vereist: de ESPHome-config esphome/ink-kalender.yaml (apparaatnaam
@@ -298,7 +299,7 @@ actions:
                 {% endif %}
                 {{ e.strftime('%Y-%m-%d %H:%M:%S') }}
 
-  # ------------------------------------------------ notitie afgevinkt op het scherm
+  # ------------------------------------------------ notitie (terug)gezet op het scherm
   - if:
       - condition: template
         value_template: "{{ trigger.id == 'afvinken' }}"
@@ -309,7 +310,8 @@ actions:
           entity_id: "{{ trigger.event.data.lijst }}"
         data:
           item: "{{ trigger.event.data.uid }}"
-          status: completed
+          status: >-
+            {{ 'needs_action' if trigger.event.data.klaar | default('ja') == 'nee' else 'completed' }}
 
   # ------------------------------------------------ agenda naar het scherm
   # Het scherm ververst alleen als er echt iets veranderd is.

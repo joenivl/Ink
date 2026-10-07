@@ -66,6 +66,10 @@ substitutions:
   # knippert het scherm niet voor elke graad verschil.
   weer_elke: "6"
 
+  # Een op het scherm afgevinkte notitie blijft nog zoveel minuten
+  # doorgestreept staan; nog eens tikken zet hem terug.
+  notitie_klaar_tonen: "60"
+
   # Geluidjes (aan/uit en volume ook in HA). Melodietjes in RTTTL-formaat:
   # d = standaardlengte, o = octaaf, b = tempo; daarna de noten.
   volume: "15"         # procent, startwaarde
@@ -194,14 +198,17 @@ api:
             // Het weer staat in RTC-geheugen en verandert maar een paar keer per dag.
             ink::neem_weer_over(ink::rtc_weer, weer,
                                 nu.is_valid() ? ink::weer_vak(ink::dagnummer(s.vandaag), nu.hour, ${weer_elke}) : -1);
-            const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken || s.ruw_notities != notities ||
-                               s.ruw_weer != ink::rtc_weer.tekst;
+            // Net afgevinkte notities blijven nog even staan, ook als HA ze al weglaat.
+            auto lijst = ink::met_klaar(ink::lees_notities(notities), ink::rtc_klaar,
+                                        nu.is_valid() ? nu.timestamp : 0, ${notitie_klaar_tonen});
+            const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken ||
+                               !ink::zelfde_notities(lijst, s.notities) || s.ruw_weer != ink::rtc_weer.tekst;
+            s.ruw_notities = notities;
             if (nieuw) {
               s.ruw_afspraken = afspraken;
-              s.ruw_notities = notities;
               s.ruw_weer = ink::rtc_weer.tekst;
               s.afspraken = ink::lees_afspraken(afspraken);
-              s.notities = ink::lees_notities(notities);
+              s.notities = lijst;
               s.weer = ink::lees_weer(s.ruw_weer);
               s.data_ontvangen = true;
             }
@@ -331,6 +338,18 @@ interval:
             s.verbonden = nu;
             if (s.slaap == ink::WAKKER)
               ink::ververs_mask() |= ink::VOL;
+          }
+          // Afgevinkte notities weghalen als hun tijd om is.
+          auto tijd = id(ha_tijd).now();
+          if (!tijd.is_valid())
+            tijd = id(rtc_tijd).now();
+          if (s.data_ontvangen && s.slaap == ink::WAKKER && tijd.is_valid()) {
+            auto lijst = ink::met_klaar(ink::lees_notities(s.ruw_notities), ink::rtc_klaar, tijd.timestamp,
+                                        ${notitie_klaar_tonen});
+            if (!ink::zelfde_notities(lijst, s.notities)) {
+              s.notities = lijst;
+              ink::ververs_mask() |= ink::NOTITIES;
+            }
           }
       - script.execute: ververs
 
@@ -996,20 +1015,32 @@ script:
                           static const char *const entiteiten[] = {
                               "${knop1_entiteit}", "${knop2_entiteit}", "${knop3_entiteit}", "${knop4_entiteit}"};
                           return std::string(entiteiten[zone - ink::KNOP1]);
-            # Notitie afvinken (meteen doorgestreept; HA haalt hem daarna weg)
+            # Notitie afvinken (meteen doorgestreept en nog even zichtbaar), of een
+            # afgevinkte terugzetten
             - if:
                 condition:
                   lambda: |-
                     const int i = zone - ink::NOTITIE0;
-                    return i >= 0 && i < (int) ink::staat().notities.size() && !ink::staat().notities[i].afgevinkt;
+                    return i >= 0 && i < (int) ink::staat().notities.size();
                 then:
                   - homeassistant.event:
                       event: esphome.ink_afvinken
                       data:
                         lijst: !lambda return ink::staat().notities[zone - ink::NOTITIE0].lijst;
                         uid: !lambda return ink::staat().notities[zone - ink::NOTITIE0].uid;
+                        klaar: !lambda |-
+                          return ink::staat().notities[zone - ink::NOTITIE0].afgevinkt ? "nee" : "ja";
                   - lambda: |-
-                      ink::staat().notities[zone - ink::NOTITIE0].afgevinkt = true;
+                      auto &n = ink::staat().notities[zone - ink::NOTITIE0];
+                      n.afgevinkt = !n.afgevinkt;
+                      if (n.afgevinkt) {
+                        auto tijd = id(ha_tijd).now();
+                        if (!tijd.is_valid())
+                          tijd = id(rtc_tijd).now();
+                        ink::onthoud_klaar(ink::rtc_klaar, n, zone - ink::NOTITIE0, tijd.is_valid() ? tijd.timestamp : 0);
+                      } else {
+                        ink::vergeet_klaar(ink::rtc_klaar, n);
+                      }
                       ink::ververs_mask() |= ink::NOTITIES;
                   - script.execute: ververs
             # Voorstel opslaan
