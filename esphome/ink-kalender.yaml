@@ -339,7 +339,8 @@ interval:
             if (s.slaap == ink::WAKKER)
               ink::ververs_mask() |= ink::VOL;
           }
-          // Afgevinkte notities weghalen als hun tijd om is.
+          // Afgevinkte notities weghalen als hun tijd om is. Volledig verversen:
+          // "Geen notities" en "+N meer" zijn grijs, en dat kan DU niet.
           auto tijd = id(ha_tijd).now();
           if (!tijd.is_valid())
             tijd = id(rtc_tijd).now();
@@ -348,7 +349,7 @@ interval:
                                         ${notitie_klaar_tonen});
             if (!ink::zelfde_notities(lijst, s.notities)) {
               s.notities = lijst;
-              ink::ververs_mask() |= ink::NOTITIES;
+              ink::ververs_mask() |= ink::VOL;
             }
           }
       - script.execute: ververs
