@@ -61,8 +61,8 @@ constexpr int TAB_X = 760;
 constexpr int WEEK_Y = 110;
 constexpr int WEEK_KOL = BREED / 7;
 constexpr int WEEK_KOP_H = 76;
-constexpr int WEEK_EIND = 944;
-constexpr int NOTITIE_Y = 958;
+constexpr int WEEK_EIND = 904;
+constexpr int NOTITIE_Y = 918;
 constexpr int NOTITIE_EIND = 1240;
 
 // Maandscherm: volledig rooster
@@ -854,7 +854,7 @@ inline void teken_maand(Display &it, const Staat &s, const Fonts &f) {
   }
 }
 
-constexpr int NOTITIE_REGEL = 40;
+constexpr int NOTITIE_REGEL = 56;  // ±6 mm: groot genoeg voor een vinger
 constexpr int NOTITIE_KOLOMMEN = 3;
 constexpr int NOTITIE_TUSSEN = 30;
 constexpr int NOTITIE_TOP = NOTITIE_Y + 42;
@@ -865,10 +865,20 @@ constexpr int NOTITIE_MAX = NOTITIE_PER_KOLOM * NOTITIE_KOLOMMEN;
 inline int notitie_x(int i) { return MARGE + (i / NOTITIE_PER_KOLOM) * (NOTITIE_KOL_B + NOTITIE_TUSSEN); }
 inline int notitie_y(int i) { return NOTITIE_TOP + (i % NOTITIE_PER_KOLOM) * NOTITIE_REGEL; }
 
+// Welke notitieplek bij een aanraking hoort: de rij eronder en de dichtstbijzijnde
+// kolom (ook in de ruimte tussen de kolommen). -1 als het buiten de notities is.
+inline int notitie_op(int x, int y) {
+  if (y < NOTITIE_TOP - 8 || y >= NOTITIE_TOP + NOTITIE_PER_KOLOM * NOTITIE_REGEL || x < MARGE - 10 || x >= B - MARGE + 10)
+    return -1;
+  const int rij = std::max(0, y - NOTITIE_TOP) / NOTITIE_REGEL;
+  const int kol = std::min(NOTITIE_KOLOMMEN - 1, std::max(0, x - MARGE + NOTITIE_TUSSEN / 2) / (NOTITIE_KOL_B + NOTITIE_TUSSEN));
+  return kol * NOTITIE_PER_KOLOM + rij;
+}
+
 inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
   tekst(it, MARGE, NOTITIE_Y - 8, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, "Notities");
   tekst(it, MARGE + breedte(it, f.kop, "Notities") + 24, NOTITIE_Y + 2, f.klein, GRIJS_DONKER, WIT,
-        TextAlign::TOP_LEFT, "tik op een notitie om af te vinken");
+        TextAlign::TOP_LEFT, "tik om af te vinken, nog eens tikken zet hem terug");
   for (int k = 0; k < NOTITIE_KOLOMMEN; k++) {
     const int x = MARGE + k * (NOTITIE_KOL_B + NOTITIE_TUSSEN);
     it.filled_rectangle(x, NOTITIE_TOP, NOTITIE_KOL_B, 2, ZWART);
@@ -876,7 +886,7 @@ inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
       it.horizontal_line(x, NOTITIE_TOP + r * NOTITIE_REGEL, NOTITIE_KOL_B, GRIJS);
   }
   if (s.notities.empty()) {
-    tekst(it, MARGE + 8, NOTITIE_TOP + 2, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Geen notities");
+    tekst(it, MARGE + 8, NOTITIE_TOP + 10, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, "Geen notities");
     return;
   }
   const int aantal = static_cast<int>(s.notities.size());
@@ -886,22 +896,22 @@ inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
     if (i == NOTITIE_MAX - 1 && aantal > NOTITIE_MAX) {
       char buf[24];
       std::snprintf(buf, sizeof(buf), "+%d meer", aantal - i);
-      tekst(it, x + 36, y + 2, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, buf);
+      tekst(it, x + 46, y + 10, f.normaal, GRIJS_DONKER, WIT, TextAlign::TOP_LEFT, buf);
       break;
     }
     const Notitie &n = s.notities[i];
     // Vakje om af te vinken
-    kader(it, x + 4, y + 10, 22, 22, 2, n.uid.empty() ? GRIJS : ZWART);
+    kader(it, x + 4, y + 13, 30, 30, 3, n.uid.empty() ? GRIJS : ZWART);
     if (n.afgevinkt) {
       for (int d = -1; d <= 1; d++) {
-        it.line(x + 8, y + 20 + d, x + 14, y + 27 + d, ZWART);
-        it.line(x + 14, y + 27 + d, x + 30, y + 6 + d, ZWART);
+        it.line(x + 9, y + 27 + d, x + 17, y + 36 + d, ZWART);
+        it.line(x + 17, y + 36 + d, x + 38, y + 9 + d, ZWART);
       }
     }
-    const std::string t = afkappen(it, f.normaal, n.tekst, NOTITIE_KOL_B - 44);
-    tekst(it, x + 36, y + 2, f.normaal, n.afgevinkt ? GRIJS_DONKER : ZWART, WIT, TextAlign::TOP_LEFT, t);
+    const std::string t = afkappen(it, f.normaal, n.tekst, NOTITIE_KOL_B - 54);
+    tekst(it, x + 46, y + 10, f.normaal, n.afgevinkt ? GRIJS_DONKER : ZWART, WIT, TextAlign::TOP_LEFT, t);
     if (n.afgevinkt)
-      it.filled_rectangle(x + 34, y + 22, breedte(it, f.normaal, t) + 4, 2, GRIJS_DONKER);
+      it.filled_rectangle(x + 44, y + 30, breedte(it, f.normaal, t) + 4, 2, GRIJS_DONKER);
   }
 }
 
@@ -1101,13 +1111,10 @@ inline Zone raak(const Staat &s, int x, int y) {
     if (binnen(x, y, tab_x(i), 0, TAB_B, KOP_H))
       return static_cast<Zone>(TAB_WEEK + i);
   if (s.scherm == SCHERM_WEEK && !venster_open(s)) {
+    const int i = notitie_op(x, y);
     const int aantal = static_cast<int>(s.notities.size());
-    for (int i = 0; i < aantal && i < NOTITIE_MAX; i++) {
-      if (i == NOTITIE_MAX - 1 && aantal > NOTITIE_MAX)
-        break;  // "+N meer"
-      if (binnen(x, y, notitie_x(i), notitie_y(i), NOTITIE_KOL_B, NOTITIE_REGEL))
-        return s.notities[i].uid.empty() ? GEEN : static_cast<Zone>(NOTITIE0 + i);
-    }
+    if (i >= 0 && i < aantal && !(i == NOTITIE_MAX - 1 && aantal > NOTITIE_MAX))  // niet "+N meer"
+      return s.notities[i].uid.empty() ? GEEN : static_cast<Zone>(NOTITIE0 + i);
   }
   // Iets ruimere vlakken in de balk; vingers zijn geen stylus.
   if (binnen(x, y, MARGE - 10, KNOP_Y - 14, SPREEK_B + 18, KNOP_H + 28))
@@ -1131,7 +1138,8 @@ inline uint32_t inhoud_hash(const Staat &s) {
     h = (h ^ 0xFF) * 16777619u;
   };
   voeg_toe(s.ruw_afspraken);
-  voeg_toe(s.ruw_notities);
+  for (const auto &n : s.notities)  // zoals getoond, met de afgevinkte
+    voeg_toe(n.tekst + (n.afgevinkt ? "|x" : "|"));
   voeg_toe(s.ruw_weer);
   char buf[32];
   const int accu_stap = std::isnan(s.accu) ? -2 : (s.accu <= ACCU_LAAG ? -1 : static_cast<int>(s.accu) / 10);
@@ -1188,10 +1196,97 @@ inline bool neem_weer_over(WeerGeheugen &g, const std::string &nieuw, int vak) {
   return true;
 }
 
+// Op het scherm afgevinkte notities blijven nog even doorgestreept staan, ook
+// als Home Assistant ze niet meer meestuurt. Zo zie je wat je net gedaan hebt
+// en kun je een verkeerde tik terugdraaien. Notities die in de HA-app worden
+// afgevinkt, verdwijnen meteen.
+struct KlaarNotitie {
+  char lijst[48];
+  char uid[48];
+  char tekst[96];
+  int64_t sinds;  // epoch-seconden; 0 = tijd onbekend
+  int16_t plek;   // positie in de lijst toen hij afgevinkt werd
+  bool gebruikt;
+};
+
+struct KlaarGeheugen {
+  KlaarNotitie n[8];
+};
+
+inline void kopieer(char *doel, size_t grootte, const std::string &bron) {
+  std::string s = bron;
+  while (s.size() >= grootte)
+    s.erase(utf8_terug(s, s.size()));  // niet midden in een teken afkappen
+  std::snprintf(doel, grootte, "%s", s.c_str());
+}
+
+inline bool is_notitie(const KlaarNotitie &k, const Notitie &n) {
+  return k.gebruikt && n.lijst == k.lijst && n.uid == k.uid;
+}
+
+inline void onthoud_klaar(KlaarGeheugen &g, const Notitie &n, int plek, int64_t nu) {
+  // Hetzelfde vak als hij er al in staat, anders een leeg vak, anders het oudste.
+  KlaarNotitie *vak = nullptr;
+  for (auto &k : g.n)
+    if (is_notitie(k, n))
+      vak = &k;
+  for (auto &k : g.n)
+    if (!vak && !k.gebruikt)
+      vak = &k;
+  if (!vak) {
+    vak = &g.n[0];
+    for (auto &k : g.n)
+      if (k.sinds < vak->sinds)
+        vak = &k;
+  }
+  kopieer(vak->lijst, sizeof(vak->lijst), n.lijst);
+  kopieer(vak->uid, sizeof(vak->uid), n.uid);
+  kopieer(vak->tekst, sizeof(vak->tekst), n.tekst);
+  vak->sinds = nu;
+  vak->plek = static_cast<int16_t>(plek);
+  vak->gebruikt = true;
+}
+
+inline void vergeet_klaar(KlaarGeheugen &g, const Notitie &n) {
+  for (auto &k : g.n)
+    if (is_notitie(k, n))
+      k.gebruikt = false;
+}
+
+// De notities van Home Assistant plus de afgevinkte die nog `klaar_min`
+// minuten getoond worden, op hun oude plek. Ruimt verlopen notities op.
+inline std::vector<Notitie> met_klaar(std::vector<Notitie> lijst, KlaarGeheugen &g, int64_t nu, int klaar_min) {
+  for (auto &k : g.n)
+    if (k.gebruikt && nu > 0 && k.sinds > 0 && nu - k.sinds >= static_cast<int64_t>(klaar_min) * 60)
+      k.gebruikt = false;
+  std::vector<const KlaarNotitie *> klaar;
+  for (const auto &k : g.n)
+    if (k.gebruikt)
+      klaar.push_back(&k);
+  std::sort(klaar.begin(), klaar.end(), [](const KlaarNotitie *a, const KlaarNotitie *b) { return a->plek < b->plek; });
+  for (const KlaarNotitie *k : klaar) {
+    auto al = std::find_if(lijst.begin(), lijst.end(), [k](const Notitie &n) { return is_notitie(*k, n); });
+    if (al != lijst.end()) {
+      al->afgevinkt = true;  // HA heeft hem (nog) als open
+      continue;
+    }
+    Notitie n{k->lijst, k->uid, k->tekst, true};
+    lijst.insert(lijst.begin() + std::min<size_t>(std::max<int>(k->plek, 0), lijst.size()), n);
+  }
+  return lijst;
+}
+
+inline bool zelfde_notities(const std::vector<Notitie> &a, const std::vector<Notitie> &b) {
+  return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](const Notitie &x, const Notitie &y) {
+    return x.lijst == y.lijst && x.uid == y.uid && x.tekst == y.tekst && x.afgevinkt == y.afgevinkt;
+  });
+}
+
 #ifndef INK_HOST
 // Blijven bewaard tijdens deep sleep (RTC-geheugen), niet na stroomverlies.
 // Gedefinieerd in ink_kalender.cpp: dit bestand komt in elk bronbestand.
 extern WeerGeheugen rtc_weer;
+extern KlaarGeheugen rtc_klaar;
 extern uint32_t rtc_inhoud_hash;
 extern time_t rtc_slaap_begin;
 extern uint8_t rtc_snelle_touch_wekkers;

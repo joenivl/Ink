@@ -93,6 +93,52 @@ int main() {
   assert(neem_weer_over(g, "e", -1));                      // tijd onbekend: overnemen
   assert(neem_weer_over(g, std::string(500, 'x') + "\n", 0) && g.tekst[0] == '\0');  // te lang
 
+  // Afgevinkte notities: blijven even staan op hun plek, daarna weg
+  {
+    KlaarGeheugen g{};
+    const int64_t t0 = 1790000000;
+    auto ha = lees_notities("todo.a|u1|Melk\ntodo.a|u2|Brood\ntodo.a|u3|Kaas\n");
+    onthoud_klaar(g, ha[1], 1, t0);
+    // HA heeft hem nog als open: doorgestreept op dezelfde plek
+    auto l = met_klaar(ha, g, t0 + 5, 60);
+    assert(l.size() == 3 && l[1].uid == "u2" && l[1].afgevinkt && !l[0].afgevinkt);
+    // HA laat hem weg: komt terug op zijn oude plek
+    auto zonder = lees_notities("todo.a|u1|Melk\ntodo.a|u3|Kaas\n");
+    auto l2 = met_klaar(zonder, g, t0 + 60, 60);
+    assert(zelfde_notities(l, l2));
+    // Na 60 minuten weg
+    auto l3 = met_klaar(zonder, g, t0 + 3600, 60);
+    assert(l3.size() == 2 && !g.n[0].gebruikt);
+    // Tijd onbekend: niet laten verlopen
+    onthoud_klaar(g, ha[2], 2, t0);
+    assert(met_klaar(zonder, g, 0, 60).size() == 2 && met_klaar(zonder, g, 0, 60)[1].afgevinkt);
+    // Terugzetten
+    vergeet_klaar(g, ha[2]);
+    assert(!met_klaar(zonder, g, t0, 60)[1].afgevinkt);
+    // Plek voorbij het einde: achteraan; vol geheugen: oudste eruit
+    onthoud_klaar(g, ha[2], 9, t0);
+    assert(met_klaar({}, g, t0, 60).size() == 1);
+    for (int i = 0; i < 9; i++) {
+      Notitie n{"todo.a", "x" + std::to_string(i), "t", false};
+      onthoud_klaar(g, n, 0, t0 + 10 + i);
+    }
+    assert(met_klaar({}, g, t0 + 20, 60).size() == 8);
+    // Lange tekst: netjes afgekapt, niet midden in een UTF-8-teken
+    Notitie lang{"todo.a", "l", std::string(94, 'a') + "é", false};
+    onthoud_klaar(g, lang, 0, t0 + 30);
+    for (const auto &k : g.n)
+      if (std::string(k.uid) == "l")
+        assert(std::string(k.tekst) == std::string(94, 'a'));
+  }
+
+  // Aanraken van notities: rij eronder, dichtstbijzijnde kolom
+  assert(notitie_op(MARGE + 20, NOTITIE_TOP + 5) == 0);
+  assert(notitie_op(MARGE + 20, NOTITIE_TOP + NOTITIE_REGEL + 5) == 1);
+  assert(notitie_op(MARGE + NOTITIE_KOL_B + 20, NOTITIE_TOP + 5) == NOTITIE_PER_KOLOM);  // tussenruimte, rechterhelft
+  assert(notitie_op(MARGE + NOTITIE_KOL_B + 5, NOTITIE_TOP + 5) == 0);                  // tussenruimte, linkerhelft
+  assert(notitie_op(MARGE + 20, NOTITIE_TOP - 30) == -1);
+  assert(notitie_op(MARGE + 20, NOTITIE_TOP + NOTITIE_PER_KOLOM * NOTITIE_REGEL) == -1);
+
   // Spaarstand: slaapduur (elke 30 min, 's nachts 23-6 door tot 6:00)
   assert(slaapduur_ms(14, 0, 30, 23, 6) == 30u * 60 * 1000);
   assert(slaapduur_ms(23, 0, 30, 23, 6) == 7u * 60 * 60 * 1000);
@@ -110,6 +156,11 @@ int main() {
   assert(inhoud_hash(a) != inhoud_hash(b));
   b.vandaag = a.vandaag;
   b.ruw_weer = "2026-10-05|rainy|14|9";
+  assert(inhoud_hash(a) != inhoud_hash(b));
+  b.ruw_weer = a.ruw_weer;
+  a.notities = b.notities = lees_notities("todo.a|u1|Melk");
+  assert(inhoud_hash(a) == inhoud_hash(b));
+  b.notities[0].afgevinkt = true;
   assert(inhoud_hash(a) != inhoud_hash(b));
 
   // UTF-8

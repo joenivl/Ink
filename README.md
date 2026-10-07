@@ -19,8 +19,9 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
   "zaterdag half drie verjaardag oma" (afspraak) of "notitie cadeautje voor Faye" (notitie).
   Het scherm laat zien wat het begrepen heeft; pas na **Opslaan** komt het in de kalender
   of op de takenlijst.
-- **Notities afvinken**: tik op een notitie; die wordt meteen doorgestreept en in HA
-  afgevinkt. Per ongeluk? In de HA-app staat hij onder "Voltooid" en kun je hem terugzetten.
+- **Notities afvinken**: tik op een notitie (de hele regel telt); die wordt meteen
+  doorgestreept en in HA afgevinkt. Hij blijft nog een uur doorgestreept staan
+  (`notitie_klaar_tonen`); per ongeluk? Tik er nog eens op en hij staat weer open.
 
 | Week | Maand |
 |---|---|
@@ -161,7 +162,7 @@ verversingen per dag.
 | **Week / Maand** (tabs bovenin) | Wisselen van scherm |
 | **Inspreken** (of de groene knop) | Tik, spreek, wacht. Tik nog een keer om te stoppen. |
 | **Opslaan / Annuleer** | Na het inspreken. Zonder keuze sluit het venster na 3 minuten. |
-| **Notitie aantikken** | Afvinken |
+| **Notitie aantikken** | Afvinken; een doorgestreepte nog eens aantikken zet hem terug |
 | **HA-knoppen** | Zetten de entiteit aan of uit; zwart betekent aan. |
 | Rechter witte knop | Scherm volledig verversen |
 | Linker witte knop | Wisselen tussen week en maand |
