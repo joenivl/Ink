@@ -62,6 +62,37 @@ int main() {
   assert(notities[1].uid.empty() && notities[1].tekst == "los");
   assert(notities[2].tekst == "Brood | kaas");
 
+  // Weer
+  auto weer = lees_weer(
+      "2026-10-05|rainy|14|9\n"
+      "2026-10-06|sunny|18|\n"
+      "2026-10-07|iets-nieuws|12\n"
+      "kapot|sunny|1|2\n"
+      "2026-10-08|fog\n");
+  assert(weer.size() == 3);
+  assert(weer[0].icoon == REGEN && weer[0].max == "14" && weer[0].min == "9");
+  assert(weer[1].icoon == ZON && weer[1].min.empty());
+  assert(weer[2].icoon == GEEN_ICOON && weer[2].max == "12" && weer[2].min.empty());
+  assert(weer_icoon("lightning-rainy") == ONWEER && weer_icoon("partlycloudy") == HALF_BEWOLKT);
+
+  // Weer overnemen: meteen als er niets staat, daarna pas in een nieuw tijdvak
+  const int dag = dagnummer({2026, 10, 5});
+  assert(weer_vak(dag, 5, 6) == weer_vak(dag, 0, 6));
+  assert(weer_vak(dag, 6, 6) != weer_vak(dag, 5, 6));
+  assert(weer_vak(dag + 1, 0, 6) != weer_vak(dag, 18, 6));
+  assert(weer_vak(dag, -1, 6) == -1);
+  WeerGeheugen g{};
+  assert(neem_weer_over(g, "a", weer_vak(dag, 12, 6)));
+  assert(!neem_weer_over(g, "a", weer_vak(dag, 12, 6)));   // ongewijzigd
+  assert(!neem_weer_over(g, "b", weer_vak(dag, 17, 6)));   // zelfde tijdvak (12-18)
+  assert(std::string(g.tekst) == "a");
+  assert(neem_weer_over(g, "b", weer_vak(dag, 18, 6)));    // nieuw tijdvak
+  assert(neem_weer_over(g, "c", weer_vak(dag + 1, 6, 6))); // nieuwe dag
+  assert(neem_weer_over(g, "", weer_vak(dag + 1, 6, 6)));  // weer uitgezet: meteen weg
+  assert(neem_weer_over(g, "d", weer_vak(dag + 1, 6, 6))); // en meteen weer terug
+  assert(neem_weer_over(g, "e", -1));                      // tijd onbekend: overnemen
+  assert(neem_weer_over(g, std::string(500, 'x') + "\n", 0) && g.tekst[0] == '\0');  // te lang
+
   // Spaarstand: slaapduur (elke 30 min, 's nachts 23-6 door tot 6:00)
   assert(slaapduur_ms(14, 0, 30, 23, 6) == 30u * 60 * 1000);
   assert(slaapduur_ms(23, 0, 30, 23, 6) == 7u * 60 * 60 * 1000);
@@ -76,6 +107,9 @@ int main() {
   b.status = LUISTEREN;
   assert(inhoud_hash(a) == inhoud_hash(b));
   b.vandaag = {2026, 10, 6};
+  assert(inhoud_hash(a) != inhoud_hash(b));
+  b.vandaag = a.vandaag;
+  b.ruw_weer = "2026-10-05|rainy|14|9";
   assert(inhoud_hash(a) != inhoud_hash(b));
 
   // UTF-8

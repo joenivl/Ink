@@ -313,6 +313,56 @@ inline std::vector<Notitie> lees_notities(const std::string &tekst) {
   return uit;
 }
 
+enum WeerIcoon : uint8_t { GEEN_ICOON, ZON, HALF_BEWOLKT, BEWOLKT, REGEN, SNEEUW, ONWEER, MIST };
+
+// Weertoestand van Home Assistant (sunny, rainy, ...) -> icoon.
+inline WeerIcoon weer_icoon(const std::string &c) {
+  if (c == "sunny" || c == "clear-night")
+    return ZON;
+  if (c == "partlycloudy")
+    return HALF_BEWOLKT;
+  if (c == "cloudy" || c == "windy" || c == "windy-variant")
+    return BEWOLKT;
+  if (c == "rainy" || c == "pouring")
+    return REGEN;
+  if (c == "snowy" || c == "snowy-rainy" || c == "hail")
+    return SNEEUW;
+  if (c == "lightning" || c == "lightning-rainy")
+    return ONWEER;
+  if (c == "fog")
+    return MIST;
+  return GEEN_ICOON;
+}
+
+struct Weer {
+  Datum datum;
+  WeerIcoon icoon{GEEN_ICOON};
+  std::string max, min;  // hele graden als tekst, leeg = onbekend
+};
+
+// Regels "JJJJ-MM-DD|toestand|max|min" (min mag leeg).
+inline std::vector<Weer> lees_weer(const std::string &tekst) {
+  std::vector<Weer> uit;
+  for (const auto &regel : lees_regels(tekst)) {
+    std::vector<std::string> veld;
+    size_t pos = 0;
+    for (size_t eind; veld.size() < 3 && (eind = regel.find('|', pos)) != std::string::npos; pos = eind + 1)
+      veld.push_back(regel.substr(pos, eind - pos));
+    veld.push_back(regel.substr(pos));
+    if (veld.size() < 3)
+      continue;
+    veld.resize(4);
+    Weer w;
+    if (!lees_datum(veld[0], w.datum))
+      continue;
+    w.icoon = weer_icoon(veld[1]);
+    w.max = veld[2].substr(0, 4);
+    w.min = veld[3].substr(0, 4);
+    uit.push_back(w);
+  }
+  return uit;
+}
+
 // ------------------------------------------------------------------ staat ---
 
 enum Status : uint8_t { RUST, LUISTEREN, VERWERKEN, VOORSTEL, MELDING };
@@ -353,6 +403,8 @@ struct Staat {
   std::string ruw_afspraken, ruw_notities;
   std::vector<Afspraak> afspraken;
   std::vector<Notitie> notities;
+  std::string ruw_weer;
+  std::vector<Weer> weer;
   Status status{RUST};
   Scherm scherm{SCHERM_WEEK};
   Voorstel voorstel;
@@ -590,6 +642,89 @@ inline int week_afspraak(Display &it, const Fonts &f, const Afspraak &a, int x, 
   return h;
 }
 
+// ------------------------------------------------------------- weericonen ---
+
+// Weericonen worden getekend op schaal `m` in tienden: 10 = ±44x40 pixels.
+struct Pen {
+  Display &it;
+  int cx, cy, m;
+  Color k;
+  int x(int v) const { return cx + v * m / 10; }
+  int y(int v) const { return cy + v * m / 10; }
+  int r(int v) const { return std::max(1, v * m / 10); }
+  void cirkel(int px, int py, int pr, int rand = 0) const { it.filled_circle(x(px), y(py), r(pr) + rand, k); }
+  void lijn(int x1, int y1, int x2, int y2) const {
+    for (int d = m >= 8 ? -1 : 0; d <= 1; d++) {
+      it.line(x(x1) + d, y(y1), x(x2) + d, y(y2), k);
+      it.line(x(x1), y(y1) + d, x(x2), y(y2) + d, k);
+    }
+  }
+  void balk(int px, int py, int w, int h) const { it.filled_rectangle(x(px), y(py), r(w), std::max(2, h * m / 10), k); }
+};
+
+// Wolkje rond (0, 0); `rand` maakt hem zoveel pixels groter.
+inline void teken_wolk(const Pen &p, int dy, int rand = 0) {
+  p.cirkel(-11, dy + 5, 8, rand);
+  p.cirkel(1, dy - 2, 12, rand);
+  p.cirkel(13, dy + 5, 8, rand);
+  p.it.filled_rectangle(p.x(-11), p.y(dy + 5), p.r(25), p.r(9) + rand, p.k);
+}
+
+inline void teken_zon(const Pen &p, int px, int py, int pr) {
+  p.cirkel(px, py, pr);
+  static const int RICHTING[8][2] = {{10, 0}, {7, 7}, {0, 10}, {-7, 7}, {-10, 0}, {-7, -7}, {0, -10}, {7, -7}};
+  for (const auto &d : RICHTING)
+    p.lijn(px + d[0] * (pr + 4) / 10, py + d[1] * (pr + 4) / 10, px + d[0] * (pr + 9) / 10, py + d[1] * (pr + 9) / 10);
+}
+
+// Weericoon rond (cx, cy) op schaal `m`, in `voor` op achtergrond `achter`.
+inline void teken_weericoon(Display &it, WeerIcoon icoon, int cx, int cy, int m, Color voor, Color achter) {
+  const Pen p{it, cx, cy, m, voor};
+  switch (icoon) {
+    case ZON:
+      teken_zon(p, 0, 0, 10);
+      break;
+    case HALF_BEWOLKT:
+      teken_zon(p, -8, -5, 7);
+      teken_wolk(Pen{it, p.x(4), cy, m, achter}, 4, 3);  // los van de zon
+      teken_wolk(Pen{it, p.x(4), cy, m, voor}, 4);
+      break;
+    case BEWOLKT:
+      teken_wolk(p, 0);
+      break;
+    case REGEN:
+      teken_wolk(p, -8);
+      for (int i = -1; i <= 1; i++)
+        p.lijn(i * 11 + 3, 9, i * 11 - 1, 16);
+      break;
+    case SNEEUW:
+      teken_wolk(p, -8);
+      for (int i = -1; i <= 1; i++)
+        p.cirkel(i * 11, 11 + (i == 0 ? 4 : 0), 3);
+      break;
+    case ONWEER:
+      teken_wolk(p, -8);
+      p.lijn(3, 8, -3, 13);
+      p.lijn(-3, 13, 4, 13);
+      p.lijn(4, 13, -2, 19);
+      break;
+    case MIST:
+      for (int i = 0; i < 4; i++)
+        p.balk(-18 + (i % 2) * 6, -11 + i * 7, 30, 3);
+      break;
+    case GEEN_ICOON:
+      break;
+  }
+}
+
+// Klein icoon en de hoogste temperatuur rechts op de datumregel van de dagkop.
+inline void teken_dagweer(Display &it, const Weer &w, int rechts, const Fonts &f, Color voor, Color achter) {
+  const std::string t = w.max.empty() ? "" : w.max + "°";
+  tekst(it, rechts - 10, WEEK_Y + 40, f.klein, voor, achter, TextAlign::TOP_RIGHT, t);
+  const int tb = breedte(it, f.klein, t);
+  teken_weericoon(it, w.icoon, rechts - 10 - tb - (tb ? 22 : 14), WEEK_Y + 55, 6, voor, achter);
+}
+
 inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
   const Datum maandag = plus_dagen(s.vandaag, -weekdag(s.vandaag));
   for (int i = 0; i < 7; i++) {
@@ -606,6 +741,13 @@ inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
     char buf[24];
     std::snprintf(buf, sizeof(buf), "%d %s", dag.d, MAAND[dag.m - 1]);
     tekst(it, x + 14, WEEK_Y + 40, f.klein, kop_tekst, kop_achter, TextAlign::TOP_LEFT, buf);
+    // Weer alleen voor vandaag en later; een verwachting voor gisteren klopt niet meer.
+    if (dagnummer(dag) >= dagnummer(s.vandaag))
+      for (const auto &weer : s.weer)
+        if (weer.datum == dag) {
+          teken_dagweer(it, weer, x + w, f, is_vandaag ? GRIJS : GRIJS_DONKER, kop_achter);
+          break;
+        }
 
     if (i > 0)
       it.vertical_line(x - 5, WEEK_Y + WEEK_KOP_H + 8, WEEK_EIND - WEEK_Y - WEEK_KOP_H - 8, GRIJS);
@@ -984,6 +1126,7 @@ inline uint32_t inhoud_hash(const Staat &s) {
   };
   voeg_toe(s.ruw_afspraken);
   voeg_toe(s.ruw_notities);
+  voeg_toe(s.ruw_weer);
   char buf[32];
   const int accu_stap = std::isnan(s.accu) ? -2 : (s.accu <= ACCU_LAAG ? -1 : static_cast<int>(s.accu) / 10);
   std::snprintf(buf, sizeof(buf), "%d-%d-%d/%d/%d", s.vandaag.j, s.vandaag.m, s.vandaag.d, accu_stap,
@@ -1004,6 +1147,47 @@ inline uint32_t slaapduur_ms(int uur, int minuut, int elke_min, int nacht_van, i
     tot_ochtend += 24 * 60;
   return static_cast<uint32_t>(tot_ochtend) * 60u * 1000u;
 }
+
+// Het weer op het scherm. Home Assistant stuurt elke ronde de nieuwste
+// verwachting, maar het scherm neemt die alleen over in een nieuw tijdvak van
+// `elke_uur` uur (bij 6: om 0, 6, 12 en 18 uur), anders knippert het voor elke
+// graad die de verwachting verschuift.
+struct WeerGeheugen {
+  char tekst[400];
+  int vak;  // tijdvak waarin het overgenomen is, zie weer_vak()
+};
+
+// Tijdvak: per dag 0..(24/elke_uur), een nieuwe dag is altijd een nieuw vak.
+// -1 als de tijd onbekend is.
+inline int weer_vak(int dag, int uur, int elke_uur) {
+  if (dag < 0 || uur < 0)
+    return -1;
+  return dag * 100 + uur / std::max(1, elke_uur);
+}
+
+// Neemt `nieuw` over als er nog geen weer staat of als het een nieuw tijdvak
+// is. Geeft true als het getoonde weer verandert.
+inline bool neem_weer_over(WeerGeheugen &g, const std::string &nieuw, int vak) {
+  std::string t = nieuw;
+  if (t.size() >= sizeof(g.tekst)) {
+    t.resize(sizeof(g.tekst) - 1);
+    t.erase(t.rfind('\n') == std::string::npos ? 0 : t.rfind('\n'));  // geen halve regel
+  }
+  if (t == g.tekst)
+    return false;
+  if (g.tekst[0] != '\0' && !t.empty() && vak >= 0 && vak == g.vak)
+    return false;  // in dit tijdvak al overgenomen
+  std::snprintf(g.tekst, sizeof(g.tekst), "%s", t.c_str());
+  g.vak = vak;
+  return true;
+}
+
+#ifdef INK_HOST
+[[maybe_unused]] static WeerGeheugen rtc_weer = {};
+#else
+// Blijft bewaard tijdens deep sleep (RTC-geheugen), niet na stroomverlies.
+static RTC_DATA_ATTR WeerGeheugen rtc_weer = {};
+#endif
 
 #ifndef INK_HOST
 // Blijft bewaard tijdens deep sleep (RTC-geheugen), niet na stroomverlies.
