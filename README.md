@@ -5,7 +5,8 @@ Vervangt het whiteboard op de koelkast door een Seeed reTerminal E1003
 
 - **Twee schermen**, te wisselen met de tabs bovenin (of de linker witte knop):
   - **Week**: zeven dagen naast elkaar, met daaronder de notities (open taken uit een
-    HA-takenlijst), net als op het whiteboard.
+    HA-takenlijst), net als op het whiteboard. In de kop van elke dag staat de
+    weersverwachting (klein icoon en de hoogste temperatuur).
   - **Maand**: het hele maandrooster. Na 5 minuten springt het scherm vanzelf terug
     naar de week.
 - **Handschrift-look**: lettertype Kalam.
@@ -63,7 +64,7 @@ zie [Preview en tests](#preview-en-tests).*
 
 ## Installatie
 
-Nodig: Home Assistant met de **ESPHome Device Builder**-add-on (ESPHome **2026.7 of nieuwer**).
+Nodig: Home Assistant **2025.4 of nieuwer** met de **ESPHome Device Builder**-add-on (ESPHome **2026.7 of nieuwer**).
 
 ### 1. Home Assistant voorbereiden
 
@@ -120,7 +121,15 @@ de inhoud van `homeassistant/blueprints/ink_kalender.yaml` en kies bij
 Automatiseringen → Blueprints *Blueprints opnieuw laden* (of herstart HA).
 
 Maak daarna een automatisering van de blueprint. Je kiest daarin de kalenders,
-de kalender voor nieuwe afspraken, eventuele takenlijsten en de AI-taak.
+de kalender voor nieuwe afspraken, eventuele takenlijsten, de AI-taak en
+eventueel een weer-entiteit (bijv. Buienradar of Met.no).
+
+**Weer:** het scherm toont de verwachting van vandaag tot en met zondag. Om
+niet steeds te knipperen neemt het een nieuwe verwachting alleen over in een
+nieuw tijdvak van `weer_elke` uur (standaard 6: vanaf 0, 6, 12 en 18 uur; met de
+spaarstand is dat de eerste ronde daarna, dus rond 6:00, 12:00 en 18:00), en
+alleen als er echt iets veranderd is. Dat zijn dus hooguit drie extra volledige
+verversingen per dag.
 
 ## Bediening
 
@@ -295,4 +304,4 @@ Nog niet getest:
   het scherm moet dan aan de stroom hangen.
 - Spraakopdrachten voor HA zelf ("doe de lampen uit"), naast afspraken.
 - Kleur of initialen per gezinslid.
-- Weersverwachting in de kop.
+- Weersverwachting ook in het maandrooster (de eerste dagen).

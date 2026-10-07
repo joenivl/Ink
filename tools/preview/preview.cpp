@@ -55,6 +55,15 @@ int main(int argc, char **argv) {
       "todo.boodschappen|b1|Batterijen kopen\n"
       "todo.boodschappen|b2|Melk\n");
   s.notities[2].afgevinkt = true;
+  s.ruw_weer =
+      "2026-10-05|partlycloudy|17|9\n"
+      "2026-10-06|rainy|14|10\n"
+      "2026-10-07|cloudy|15|8\n"
+      "2026-10-08|sunny|18|7\n"
+      "2026-10-09|lightning-rainy|16|11\n"
+      "2026-10-10|fog|12|6\n"
+      "2026-10-11|snowy|3|-2\n";
+  s.weer = ink::lees_weer(s.ruw_weer);
   s.knoppen[0] = {"Woonkamer", true};
   s.knoppen[1] = {"Keuken", false};
   s.knoppen[2] = {"Tuin", false};

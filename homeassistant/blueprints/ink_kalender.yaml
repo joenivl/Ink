@@ -38,6 +38,16 @@ blueprint:
           filter:
             - domain: todo
           multiple: true
+    weer_entiteit:
+      name: Weersverwachting
+      description: >
+        Toont per dag een klein weericoon en de hoogste temperatuur in de
+        weekweergave, bijv. van Buienradar of Met.no. Mag leeg (dan geen weer).
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: weather
     ai_taak:
       name: AI-taak
       description: >
@@ -93,6 +103,7 @@ variables:
   kalenders: !input kalenders
   doel_kalender: !input doel_kalender
   notitielijsten: !input notitielijsten
+  weer_entiteit: !input weer_entiteit
   ai_taak: !input ai_taak
   kalendernaam_tonen: !input kalendernaam_tonen
   standaard_duur: !input standaard_duur
@@ -344,6 +355,37 @@ actions:
           {%- endfor -%}
         {%- endfor -%}
         {{- ns.r | sort | join('\n') -}}
+      weer_tekst: ""
+  # Per regel "JJJJ-MM-DD|toestand|max|min", van vandaag tot en met zondag.
+  # Het scherm neemt dit maar een paar keer per dag over (weer_elke).
+  - if:
+      - condition: template
+        value_template: "{{ weer_entiteit not in ['', none] }}"
+    then:
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: "{{ weer_entiteit }}"
+        data:
+          type: daily
+        response_variable: verwachting
+      - variables:
+          weer_tekst: >-
+            {%- set ns = namespace(r=[], dagen=[]) -%}
+            {%- set van = now().strftime('%Y-%m-%d') -%}
+            {%- set tot = (now() + timedelta(days=6 - now().weekday())).strftime('%Y-%m-%d') -%}
+            {%- set lijst = verwachting[weer_entiteit].forecast | default([])
+                 if verwachting is defined and weer_entiteit in verwachting else [] -%}
+            {%- for f in lijst -%}
+              {%- set d = as_local(as_datetime(f.datetime)).strftime('%Y-%m-%d') -%}
+              {%- if van <= d <= tot and d not in ns.dagen -%}
+                {%- set max = (f.temperature | round(0) | int) if f.temperature is number else '' -%}
+                {%- set min = (f.templow | round(0) | int) if f.templow is number else '' -%}
+                {%- set ns.dagen = ns.dagen + [d] -%}
+                {%- set ns.r = ns.r + [d ~ '|' ~ (f.condition | default('')) ~ '|' ~ max ~ '|' ~ min] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{- ns.r | join('\n') -}}
   - if:
       - condition: template
         value_template: "{{ notitielijsten | count > 0 }}"
@@ -358,6 +400,7 @@ actions:
         continue_on_error: true
         data:
           afspraken: "{{ afspraken_tekst }}"
+          weer: "{{ weer_tekst }}"
           notities: >-
             {%- set ns = namespace(r=[]) -%}
             {%- for lijst, data in taken.items() -%}
@@ -371,4 +414,5 @@ actions:
         continue_on_error: true
         data:
           afspraken: "{{ afspraken_tekst }}"
+          weer: "{{ weer_tekst }}"
           notities: ""

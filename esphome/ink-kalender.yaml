@@ -49,6 +49,12 @@ substitutions:
   # Zet op "false" als het scherm meteen weer wakker wordt (dan alleen de knoppen).
   touch_wekt: "true"
 
+  # Weersverwachting (kies een weer-entiteit in de blueprint). Een nieuwe
+  # verwachting komt alleen in een nieuw tijdvak van `weer_elke` uur op het
+  # scherm: bij "6" vanaf 0, 6, 12 en 18 uur (de eerste ronde daarna). Zo
+  # knippert het scherm niet voor elke graad verschil.
+  weer_elke: "6"
+
   # Geluidjes (aan/uit en volume ook in HA). Melodietjes in RTTTL-formaat:
   # d = standaardlengte, o = octaaf, b = tempo; daarna de noten.
   volume: "15"         # procent, startwaarde
@@ -152,6 +158,7 @@ api:
       variables:
         afspraken: string
         notities: string
+        weer: string
       then:
         - lambda: |-
             auto &s = ink::staat();
@@ -162,12 +169,18 @@ api:
               s.vandaag = {nu.year, nu.month, nu.day_of_month};
               s.tijd_geldig = true;
             }
-            const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken || s.ruw_notities != notities;
+            // Het weer staat in RTC-geheugen en verandert maar een paar keer per dag.
+            ink::neem_weer_over(ink::rtc_weer, weer,
+                                nu.is_valid() ? ink::weer_vak(ink::dagnummer(s.vandaag), nu.hour, ${weer_elke}) : -1);
+            const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken || s.ruw_notities != notities ||
+                               s.ruw_weer != ink::rtc_weer.tekst;
             if (nieuw) {
               s.ruw_afspraken = afspraken;
               s.ruw_notities = notities;
+              s.ruw_weer = ink::rtc_weer.tekst;
               s.afspraken = ink::lees_afspraken(afspraken);
               s.notities = ink::lees_notities(notities);
+              s.weer = ink::lees_weer(s.ruw_weer);
               s.data_ontvangen = true;
             }
             if (s.slaap == ink::SLAAPT) {
