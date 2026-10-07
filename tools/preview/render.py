@@ -38,7 +38,7 @@ EMOJI_FAMILIE = "Noto Emoji"  # 'extras' in de font:-sectie
 
 def iconen() -> list:
     """ICONEN uit ink_kalender.h, gecontroleerd tegen de glyphs in de YAML."""
-    h = (ROOT / "esphome" / "ink_kalender.h").read_text()
+    h = (ROOT / "esphome" / "components" / "ink" / "ink_kalender.h").read_text()
     lijst = [int(c, 16) for c in re.findall(r"0x([0-9A-F]+)", h.split("ICONEN[] = {")[1].split("};")[0])]
     yml = (ROOT / "esphome" / "ink-kalender.yaml").read_text()
     glyphs = [ord(c) for c in re.findall(r'"(.)"', yml.split("extras: &iconen")[1].split("]")[0])]

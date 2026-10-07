@@ -1,0 +1,42 @@
+# Dit bestand zet je één keer in Home Assistant als /config/esphome/ink-kalender.yaml.
+# De rest (esphome/ink-kalender.yaml en de C++-code) haalt ESPHome bij elke
+# installatie zelf van GitHub. Bijwerken = in de ESPHome Builder op "Install".
+#
+# Nodig in /config/esphome/secrets.yaml: zie esphome/secrets.example.yaml.
+
+substitutions:
+  github_token: !secret github_token
+
+  # Eigen instellingen. Alles uit de substitutions bovenin
+  # esphome/ink-kalender.yaml kan hier; wat je weglaat, krijgt de standaardwaarde.
+  knop1_naam: Woonkamer
+  knop1_entiteit: light.woonkamer
+  knop2_naam: Keuken
+  knop2_entiteit: light.keuken
+  knop3_naam: Tuin
+  knop3_entiteit: light.tuin
+  knop4_naam: Alles uit
+  knop4_entiteit: script.alles_uit
+
+  # Een andere branch uitproberen? Zet hier en bij `ref` hieronder dezelfde naam.
+  ink_versie: main
+
+packages:
+  ink:
+    url: https://github.com/joenivl/Ink
+    ref: main
+    username: joenivl
+    password: !secret github_token
+    files: [esphome/ink-kalender.yaml]
+    refresh: 0s  # altijd de nieuwste versie ophalen
+
+# Secrets mogen niet in een package van GitHub staan, dus die staan hier.
+api:
+  encryption:
+    key: !secret api_sleutel
+
+wifi:
+  ssid: !secret wifi_iot_ssid
+  password: !secret wifi_iot_password
+  ap:
+    password: !secret herstel_wachtwoord

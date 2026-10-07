@@ -7,10 +7,21 @@
 # - spaarstand: slaapt tussendoor, wakker door een dubbeltik of knop
 #
 # Hoort bij de blueprint homeassistant/blueprints/ink_kalender.yaml.
+#
+# Dit bestand zet je niet zelf in Home Assistant: de kleine
+# esphome/ha/ink-kalender.yaml haalt het als package van GitHub, samen met de
+# C++-code (esphome/components/ink). Daar staan ook je secrets en je eigen
+# instellingen; alles hieronder bij `substitutions` kun je daar overschrijven.
 # Installatie: zie README.md.
 
 substitutions:
   naam: ink-kalender  # niet veranderen: de blueprint verwacht deze naam
+  # Waar de C++-code vandaan komt. github_token zet je in je eigen
+  # ink-kalender.yaml (uit je secrets); ink_versie moet gelijk zijn aan de
+  # `ref` van de package daar.
+  ink_repo: https://github.com/joenivl/Ink
+  ink_versie: main
+  github_gebruiker: joenivl
   vriendelijke_naam: Ink kalender
   tijdzone: Europe/Amsterdam
 
@@ -81,8 +92,6 @@ esphome:
   name: ${naam}
   friendly_name: ${vriendelijke_naam}
   min_version: 2026.7.0
-  includes:
-    - ink_kalender.h
   on_boot:
     # Vóór de hardware wordt ingesteld: vastgezette pinnen vrijgeven en
     # kijken waarom we wakker zijn.
@@ -138,6 +147,20 @@ esp32:
   framework:
     type: esp-idf
 
+# Layout en logica (C++), van GitHub zoals de rest van dit bestand.
+external_components:
+  - source:
+      type: git
+      url: ${ink_repo}
+      ref: ${ink_versie}
+      username: ${github_gebruiker}
+      password: ${github_token}
+      path: esphome/components
+    components: [ink]
+    refresh: 0s
+
+ink:
+
 psram:
   mode: octal
   speed: 80MHz
@@ -146,8 +169,7 @@ logger:
   hardware_uart: UART0
 
 api:
-  encryption:
-    key: !secret api_sleutel
+  # encryption: in je eigen ink-kalender.yaml (secret api_sleutel)
   on_client_connected:
     - delay: 2s
     # Vraag Home Assistant om de agenda te sturen.
@@ -238,11 +260,9 @@ ota:
     encryption:
 
 wifi:
-  ssid: !secret wifi_iot_ssid
-  password: !secret wifi_iot_password
+  # ssid, password en ap-password: in je eigen ink-kalender.yaml (secrets)
   ap:
     ssid: Ink-Kalender
-    password: !secret herstel_wachtwoord
 
 captive_portal:
 

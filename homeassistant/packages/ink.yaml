@@ -1,0 +1,64 @@
+# Houdt de Ink-blueprint vanzelf bij: elke nacht (en bij het starten van HA)
+# haalt dit de nieuwste versie van GitHub en herlaadt de automatiseringen als
+# er iets veranderd is. Handmatig kan ook: script "Ink bijwerken".
+#
+# Eenmalig: zet dit bestand in /config/packages/ink.yaml en zorg dat
+# configuration.yaml packages laadt:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Het token komt uit de secrets van de ESPHome Builder
+# (/config/esphome/secrets.yaml, `github_token`), zodat het maar op één plek staat.
+
+shell_command:
+  # Schrijft "bijgewerkt" of "ongewijzigd"; bij een fout blijft de oude blueprint staan.
+  ink_blueprint_ophalen: >-
+    t=$(sed -n 's/^github_token: *//p' /config/esphome/secrets.yaml | tr -d "\"' ") &&
+    d=/config/blueprints/automation/ink && mkdir -p $d &&
+    curl -fsSL -H "Authorization: Bearer $t" -H "Accept: application/vnd.github.raw+json"
+    -o $d/ink_kalender.yaml.nieuw
+    "https://api.github.com/repos/joenivl/Ink/contents/homeassistant/blueprints/ink_kalender.yaml?ref=main" &&
+    if cmp -s $d/ink_kalender.yaml.nieuw $d/ink_kalender.yaml;
+    then rm $d/ink_kalender.yaml.nieuw; echo ongewijzigd;
+    else mv $d/ink_kalender.yaml.nieuw $d/ink_kalender.yaml; echo bijgewerkt; fi
+
+script:
+  ink_bijwerken:
+    alias: Ink bijwerken
+    icon: mdi:cloud-download
+    sequence:
+      - action: shell_command.ink_blueprint_ophalen
+        continue_on_error: true
+        response_variable: uit
+      - if:
+          - condition: template
+            value_template: "{{ uit is not defined or uit.returncode != 0 }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: ink_bijwerken
+              title: Ink bijwerken mislukt
+              message: >-
+                De blueprint kon niet van GitHub gehaald worden.
+                Klopt github_token in /config/esphome/secrets.yaml?
+                {{ uit.stderr if uit is defined else '' }}
+          - stop: Ophalen mislukt
+      # Herladen leest ook de blueprint opnieuw in.
+      - if:
+          - condition: template
+            value_template: "{{ 'bijgewerkt' in uit.stdout }}"
+        then:
+          - action: automation.reload
+
+automation:
+  - id: ink_bijwerken
+    alias: Ink bijwerken
+    description: Haalt elke nacht de nieuwste Ink-blueprint van GitHub.
+    triggers:
+      - trigger: time
+        at: "04:00:00"
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: script.ink_bijwerken

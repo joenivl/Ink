@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cstdio>
 
-#include "../../esphome/ink_kalender.h"
+#include "../../esphome/components/ink/ink_kalender.h"
 
 using namespace ink;
 

@@ -2,7 +2,7 @@
 // Gebruik: preview <week|maand|luisteren|voorstel|notitie|accu-laag|slaapstand|wakker-worden|melding>  > opdrachten.jsonl
 #include <cstring>
 
-#include "../../esphome/ink_kalender.h"
+#include "../../esphome/components/ink/ink_kalender.h"
 
 using namespace esphome::display;
 
