@@ -207,6 +207,10 @@ api:
       then:
         - lambda: |-
             auto &s = ink::staat();
+            // Wat er nu op het scherm staat, om straks alleen het verschil te verversen.
+            const bool eerste = !s.data_ontvangen;
+            const ink::Datum oude_dag = s.vandaag;
+            const auto voor = ink::week_hashes(s);
             auto nu = id(ha_tijd).now();
             if (!nu.is_valid())
               nu = id(rtc_tijd).now();
@@ -225,8 +229,9 @@ api:
             // Net afgevinkte notities blijven nog even staan, ook als HA ze al weglaat.
             auto lijst = ink::met_klaar(ink::lees_notities(notities), ink::rtc_klaar,
                                         nu.is_valid() ? nu.timestamp : 0, ${notitie_klaar_tonen});
-            const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken ||
-                               !ink::zelfde_notities(lijst, s.notities) || s.ruw_weer != ink::rtc_weer.tekst;
+            const bool notities_anders = !ink::zelfde_notities(lijst, s.notities);
+            const bool nieuw = !s.data_ontvangen || s.ruw_afspraken != afspraken || notities_anders ||
+                               s.ruw_weer != ink::rtc_weer.tekst;
             s.ruw_notities = notities;
             if (nieuw) {
               s.ruw_afspraken = afspraken;
@@ -256,8 +261,12 @@ api:
               id(net_wakker) = true;
               ink::ververs_mask() |= ink::VOL;
             } else if (nieuw || id(wacht_op_agenda)) {
+              // Alleen de veranderde dagen en/of de notities, niet het hele scherm.
               id(wacht_op_agenda) = false;
-              ink::ververs_mask() |= ink::VOL;
+              if (eerste || ink::venster_open(s))
+                ink::ververs_mask() |= ink::VOL;
+              else
+                ink::ververs_verschil(s, oude_dag, voor, notities_anders);
             }
         - script.execute: ververs
         - if:
@@ -418,8 +427,8 @@ interval:
             if (s.slaap == ink::WAKKER)
               ink::ververs_mask() |= ink::VOL;
           }
-          // Afgevinkte notities weghalen als hun tijd om is. Volledig verversen:
-          // "Geen notities" en "+N meer" zijn grijs, en dat kan DU niet.
+          // Afgevinkte notities weghalen als hun tijd om is. Met GC16 (alleen het
+          // notitiestuk): "Geen notities" en "+N meer" zijn grijs, en dat kan DU niet.
           auto tijd = id(ha_tijd).now();
           if (!tijd.is_valid())
             tijd = id(rtc_tijd).now();
@@ -428,7 +437,10 @@ interval:
                                         ${notitie_klaar_tonen});
             if (!ink::zelfde_notities(lijst, s.notities)) {
               s.notities = lijst;
-              ink::ververs_mask() |= ink::VOL;
+              if (s.scherm == ink::SCHERM_WEEK && !ink::venster_open(s))
+                ink::ververs_ook(0, ink::NOTITIE_Y - 12, ink::B, ink::NOTITIE_EIND - ink::NOTITIE_Y + 14);
+              else
+                ink::ververs_mask() |= ink::VOL;
             }
           }
       - script.execute: ververs
@@ -770,7 +782,8 @@ script:
             - it8951.update:
                 id: epd
                 mode: !lambda |-
-                  return (ink::ververs_mask() & ink::VOL) ? it8951::UPDATE_MODE_GC16 : it8951::UPDATE_MODE_DU;
+                  return (ink::ververs_mask() & (ink::VOL | ink::GEBIED)) ? it8951::UPDATE_MODE_GC16
+                                                                          : it8951::UPDATE_MODE_DU;
 
   # Speelt een geluidje, tenzij geluid uit staat of het stille uren zijn.
   - id: geluid
@@ -805,9 +818,13 @@ script:
       - lambda: |-
           auto &s = ink::staat();
           const bool venster_was_open = ink::venster_open(s);
+          const ink::Gebied venster = ink::venster_gebied(s);
           s.status = static_cast<ink::Status>(status);
-          // Venster dicht = de maand eronder moet terug, dus volledig tekenen.
-          ink::ververs_mask() |= (venster_was_open && !ink::venster_open(s)) ? ink::VOL : ink::BALK;
+          // Venster dicht: alleen wat eronder stond opnieuw (de balk is dan hetzelfde).
+          if (venster_was_open && !ink::venster_open(s))
+            ink::ververs_ook(venster);
+          else
+            ink::ververs_mask() |= ink::BALK;
       - script.execute: ververs
 
   - id: melding
@@ -875,10 +892,7 @@ script:
           condition:
             lambda: return id(wacht_op_agenda);
           then:
-            - lambda: |-
-                id(wacht_op_agenda) = false;
-                ink::ververs_mask() |= ink::VOL;
-            - script.execute: ververs
+            - lambda: id(wacht_op_agenda) = false;
 
   - id: knop_status
     parameters:
@@ -1191,9 +1205,12 @@ script:
                         soort: !lambda return ink::staat().voorstel.soort;
                   - script.stop: venster_sluiten_na_tijd
                   - lambda: |-
-                      ink::staat().status = ink::RUST;
+                      // Venster meteen weg (alleen dat stuk verversen); de nieuwe
+                      // afspraak of notitie komt erbij zodra HA de agenda stuurt.
+                      auto &s = ink::staat();
+                      ink::ververs_ook(ink::venster_gebied(s));
+                      s.status = ink::RUST;
                       id(wacht_op_agenda) = true;
-                      ink::ververs_mask() |= ink::BALK;
                   - script.execute: ververs
                   - script.execute: wacht_op_agenda_timeout
             # Afspraak aangetikt (week of dagoverzicht): details opvragen bij HA

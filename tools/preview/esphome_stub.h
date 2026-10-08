@@ -60,6 +60,8 @@ inline std::string json_tekst(const char *s) {
 
 class Display {
  public:
+  void start_clipping(int, int, int, int) {}  // de preview tekent altijd alles
+  void end_clipping() {}
   void fill(Color c) { std::printf("{\"op\":\"fill\",\"c\":%d}\n", c.r); }
   void filled_rectangle(int x, int y, int w, int h, Color c) {
     std::printf("{\"op\":\"rect\",\"x\":%d,\"y\":%d,\"w\":%d,\"h\":%d,\"c\":%d,\"fill\":1}\n", x, y, w, h, c.r);
