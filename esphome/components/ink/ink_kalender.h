@@ -35,6 +35,7 @@
 #include <cstring>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ink {
@@ -679,11 +680,55 @@ inline BaseFont *(&nep_vette_fonts())[3] {
   return f;
 }
 
-// ------------------------------------------------------------ tekst-hulp ---
+// Alleen f_normaal en f_kop hebben de iconen (meer past niet in flash). De
+// andere fonts lenen ze: {font zonder, font met}; gezet door teken().
+inline std::pair<BaseFont *, BaseFont *> (&iconen_lenen())[3] {
+  static std::pair<BaseFont *, BaseFont *> p[3] = {};
+  return p;
+}
+
+inline BaseFont *leen_iconen_van(BaseFont *f) {
+#ifdef INK_HOST
+  return nullptr;  // de preview tekent iconen in elk font
+#else
+  for (const auto &p : iconen_lenen())
+    if (p.first == f)
+      return p.second;
+  return nullptr;
+#endif
+}
+
+// De tekst in stukken: gewone tekst in f, iconen in het font waar ze van lenen.
+inline std::vector<std::pair<std::string, BaseFont *>> tekst_stukken(BaseFont *f, BaseFont *iconen,
+                                                                       const std::string &s) {
+  std::vector<std::pair<std::string, BaseFont *>> uit;
+  for (size_t i = 0; i < s.size();) {
+    const size_t begin = i;
+    BaseFont *g = is_icoon(utf8_teken(s, i)) ? iconen : f;
+    i = std::min(i, s.size());
+    if (uit.empty() || uit.back().second != g)
+      uit.push_back({std::string(), g});
+    uit.back().first.append(s, begin, i - begin);
+  }
+  return uit;
+}
+
+inline bool met_iconen(const std::string &s) {
+  for (size_t i = 0; i < s.size();)
+    if (is_icoon(utf8_teken(s, i)))
+      return true;
+  return false;
+}
 
 inline int breedte(Display &it, BaseFont *f, const std::string &s) {
   if (s.empty())
     return 0;
+  if (BaseFont *l = leen_iconen_van(f); l != nullptr && met_iconen(s)) {
+    int w = 0;
+    for (const auto &st : tekst_stukken(f, l, s))
+      w += breedte(it, st.second, st.first);
+    return w;
+  }
   int x1, y1, w, h;
   it.get_text_bounds(0, 0, s.c_str(), f, TextAlign::TOP_LEFT, &x1, &y1, &w, &h);
   return w;
@@ -758,6 +803,27 @@ inline std::vector<std::string> omloop(Display &it, BaseFont *f, const std::stri
 
 inline void tekst(Display &it, int x, int y, BaseFont *f, Color kleur, Color achter, TextAlign uitlijning,
                   const std::string &s) {
+#ifndef INK_HOST
+  // Iconen uit een ander font: stuk voor stuk, allemaal op dezelfde basislijn.
+  if (BaseFont *l = leen_iconen_van(f); l != nullptr && met_iconen(s)) {
+    const int w = breedte(it, f, s);
+    if (uitlijning == TextAlign::TOP_CENTER)
+      x -= w / 2;
+    else if (uitlijning == TextAlign::TOP_RIGHT)
+      x -= w;
+    int x1, y1, bw, bh;
+    it.get_text_bounds(0, 0, "A", f, TextAlign::BASELINE_LEFT, &x1, &y1, &bw, &bh);
+    const int basislijn = y - y1;  // y1 = -(afstand van de bovenkant tot de basislijn)
+    for (const auto &st : tekst_stukken(f, l, s)) {
+      it.print(x, basislijn, st.second, kleur, TextAlign::BASELINE_LEFT, st.first.c_str(), achter);
+      for (BaseFont *v : nep_vette_fonts())
+        if (v == st.second)
+          it.print(x + 1, basislijn, st.second, kleur, TextAlign::BASELINE_LEFT, st.first.c_str(), achter);
+      x += breedte(it, st.second, st.first);
+    }
+    return;
+  }
+#endif
   it.print(x, y, f, kleur, uitlijning, s.c_str(), achter);
   for (BaseFont *v : nep_vette_fonts())
     if (v == f)
@@ -1443,6 +1509,9 @@ inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
 
 // Hoofdfunctie, aangeroepen vanuit de display-lambda.
 inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
+  iconen_lenen()[0] = {f.klein, f.normaal};
+  iconen_lenen()[1] = {f.vet, f.normaal};
+  iconen_lenen()[2] = {f.groot, f.kop};
   auto &nep = nep_vette_fonts();
   nep[0] = f.nep_vet ? f.vet : nullptr;
   nep[1] = f.nep_vet ? f.kop : nullptr;
