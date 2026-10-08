@@ -86,6 +86,8 @@ int main() {
   assert(!neem_weer_over(g, "a", weer_vak(dag, 12, 6)));   // ongewijzigd
   assert(!neem_weer_over(g, "b", weer_vak(dag, 17, 6)));   // zelfde tijdvak (12-18)
   assert(std::string(g.tekst) == "a");
+  assert(neem_weer_over(g, "b", weer_vak(dag, 17, 6), true) && std::string(g.tekst) == "b");  // ververst toch
+  assert(neem_weer_over(g, "a", weer_vak(dag, 17, 6), true));  // terug naar a voor de rest van de test
   assert(neem_weer_over(g, "b", weer_vak(dag, 18, 6)));    // nieuw tijdvak
   assert(neem_weer_over(g, "c", weer_vak(dag + 1, 6, 6))); // nieuwe dag
   assert(neem_weer_over(g, "", weer_vak(dag + 1, 6, 6)));  // weer uitgezet: meteen weg
