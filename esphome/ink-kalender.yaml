@@ -196,8 +196,13 @@ api:
               s.tijd_geldig = true;
             }
             // Het weer staat in RTC-geheugen en verandert maar een paar keer per dag.
-            ink::neem_weer_over(ink::rtc_weer, weer,
-                                nu.is_valid() ? ink::weer_vak(ink::dagnummer(s.vandaag), nu.hour, ${weer_elke}) : -1);
+            // Dat geheugen is leeg na een herstart (installeren, stroom eraf); dan
+            // de kopie uit flash, zodat het weer van de afgelopen dagen blijft.
+            if (ink::rtc_weer.tekst[0] == '\0')
+              ink::rtc_weer = id(weer_bewaard);
+            if (ink::neem_weer_over(ink::rtc_weer, weer,
+                                    nu.is_valid() ? ink::weer_vak(ink::dagnummer(s.vandaag), nu.hour, ${weer_elke}) : -1))
+              id(weer_bewaard) = ink::rtc_weer;
             // Net afgevinkte notities blijven nog even staan, ook als HA ze al weglaat.
             auto lijst = ink::met_klaar(ink::lees_notities(notities), ink::rtc_klaar,
                                         nu.is_valid() ? nu.timestamp : 0, ${notitie_klaar_tonen});
@@ -323,6 +328,11 @@ globals:
   - id: net_wakker
     type: bool
     initial_value: "false"
+  # Kopie van ink::rtc_weer in flash; alleen geschreven als het weer verandert
+  # (een paar keer per dag).
+  - id: weer_bewaard
+    type: ink::WeerGeheugen
+    restore_value: true
 
 time:
   - platform: pcf8563
