@@ -16,6 +16,7 @@
 // external component), dus alleen wat we echt gebruiken.
 #include "esphome/components/display/display.h"
 #include "esphome/components/i2c/i2c_bus.h"
+#include "esphome/components/it8951/it8951.h"
 #include "esphome/core/color.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
@@ -30,6 +31,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -107,26 +109,65 @@ const Color GRIJS_LICHT(225, 225, 225);
 const Color GRIJS(170, 170, 170);
 const Color GRIJS_DONKER(100, 100, 100);
 
-// Gevuld vlak. filled_rectangle tekent pixel voor pixel via draw_pixel_at, en
-// de IT8951 vraagt daar per pixel de klok op (waakhond). Bij grote vlakken,
-// zoals het witmaken van de notities of een groot venster, kost dat honderden
-// milliseconden. draw_pixels_at doet dat maar één keer per regel.
+#ifndef INK_HOST
+// Toegang tot de framebuffer van de IT8951. Die velden zijn protected; via een
+// afgeleide klasse mag je er een member-pointer naar maken (de klasse zelf
+// wordt nooit aangemaakt).
+struct Framebuffer : esphome::it8951::IT8951Display {
+  static uint8_t *buffer(IT8951Display &d) { return d.*(&Framebuffer::buffer_); }
+  static uint16_t rijbreedte(IT8951Display &d) { return d.*(&Framebuffer::row_width_); }
+  static bool grijs(IT8951Display &d) { return d.*(&Framebuffer::grayscale_); }
+  static void naar_scherm(IT8951Display &d, int &x, int &y) { (d.*(&Framebuffer::apply_transform_))(x, y); }
+};
+#endif
+
+// Gevuld vlak. filled_rectangle tekent pixel voor pixel (met per pixel een
+// kleuromrekening en een blik op de klok); bij grote vlakken, zoals het
+// witmaken van de notities of een groot venster, kost dat honderden
+// milliseconden. Hier gaat het met memset rechtstreeks in de framebuffer.
 inline void vlak(Display &it, int x, int y, int w, int h, Color c) {
 #ifdef INK_HOST
   it.filled_rectangle(x, y, w, h, c);
 #else
-  if (w <= 0 || h <= 0)
+  const int x0 = std::max(x, 0), y0 = std::max(y, 0);
+  const int x1 = std::min(x + w, it.get_width()), y1 = std::min(y + h, it.get_height());
+  if (x1 <= x0 || y1 <= y0)
     return;
-  static uint8_t regel[B * 3];
-  w = std::min(w, B);
-  for (int i = 0; i < w * 3; i += 3) {
-    regel[i] = c.r;
-    regel[i + 1] = c.g;
-    regel[i + 2] = c.b;
+  // Het enige scherm is een IT8951 (zie ink-kalender.yaml).
+  auto &d = static_cast<esphome::it8951::IT8951Display &>(it);
+  if (!Framebuffer::grijs(d) || it.get_clipping().is_set() || Framebuffer::buffer(d) == nullptr) {
+    it.filled_rectangle(x0, y0, x1 - x0, y1 - y0, c);
+    return;
   }
-  for (int j = 0; j < h; j++)
-    it.draw_pixels_at(x, y + j, w, 1, regel, esphome::display::COLOR_ORDER_RGB, esphome::display::COLOR_BITNESS_888,
-                      true, 0, 0, 0);
+  // Twee hoeken via de driver: die rekent de kleur om en houdt het gebied bij
+  // dat naar het scherm moet.
+  it.draw_pixel_at(x0, y0, c);
+  it.draw_pixel_at(x1 - 1, y1 - 1, c);
+  int ax = x0, ay = y0, bx = x1 - 1, by = y1 - 1;
+  Framebuffer::naar_scherm(d, ax, ay);
+  Framebuffer::naar_scherm(d, bx, by);
+  uint8_t *buf = Framebuffer::buffer(d);
+  const uint32_t rij = Framebuffer::rijbreedte(d);
+  // Twee pixels per byte: even x in de hoge helft, oneven x in de lage.
+  const uint8_t b0 = buf[ay * rij + ax / 2];
+  const uint8_t grijs = (ax & 1) ? (b0 & 0x0F) : (b0 >> 4);
+  const uint8_t vol = static_cast<uint8_t>(grijs << 4 | grijs);
+  const int lx = std::min(ax, bx), hx = std::max(ax, bx);  // hx doet mee
+  const int ly = std::min(ay, by), hy = std::max(ay, by);
+  for (int ny = ly; ny <= hy; ny++) {
+    uint8_t *r = buf + ny * rij;
+    int van = lx, tot = hx;
+    if (van & 1) {
+      r[van / 2] = (r[van / 2] & 0xF0) | grijs;
+      van++;
+    }
+    if (tot >= van && !(tot & 1)) {
+      r[tot / 2] = (r[tot / 2] & 0x0F) | static_cast<uint8_t>(grijs << 4);
+      tot--;
+    }
+    if (tot > van)
+      memset(r + van / 2, vol, (tot - van + 1) / 2);
+  }
 #endif
 }
 
