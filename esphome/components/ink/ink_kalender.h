@@ -522,6 +522,7 @@ struct Staat {
   float vochtigheid{NAN};
   float accu{NAN};  // procent
   Slaap slaap{WAKKER};
+  uint8_t wek_stap{0};  // tijdens WORDT_WAKKER: 0 wifi, 1 Home Assistant, 2 agenda
 };
 
 // Onder dit percentage waarschuwt het scherm om op te laden.
@@ -1118,17 +1119,58 @@ inline void teken_microfoon(Display &it, int mx, int my, Color voor, Color achte
   vlak(it, mx - 14, my + 36, 28, 4, voor);
 }
 
+// Zonnetje voor "wakker worden"
+inline void teken_zon(Display &it, int mx, int my, Color kleur) {
+  it.filled_circle(mx, my, 17, kleur);
+  // 8 stralen; richting * 7 (schuin: 5 en 5, ongeveer even lang)
+  static const int8_t richting[8][2] = {{7, 0}, {-7, 0}, {0, 7}, {0, -7}, {5, 5}, {-5, 5}, {5, -5}, {-5, -5}};
+  for (const auto &r : richting)
+    for (int dx = -1; dx <= 1; dx++)
+      for (int dy = -1; dy <= 1; dy++)
+        it.line(mx + r[0] * 25 / 7 + dx, my + r[1] * 25 / 7 + dy, mx + r[0] * 37 / 7 + dx, my + r[1] * 37 / 7 + dy, kleur);
+}
+
+// Voortgang tijdens het wakker worden: wifi -> Home Assistant -> agenda.
+inline void teken_wekstappen(Display &it, const Fonts &f, int stap, Color v, Color a) {
+  static const char *const namen[3] = {"Wifi", "Home Assistant", "Agenda"};
+  constexpr int AFSTAND = 250, R = 15;
+  const int y = KNOP_Y + 40;
+  const int x0 = B - MARGE - 110 - 2 * AFSTAND;
+  for (int i = 0; i < 2; i++) {  // verbindingslijnen
+    const int van = x0 + i * AFSTAND + R + 8, tot = x0 + (i + 1) * AFSTAND - R - 8;
+    if (i < stap)
+      vlak(it, van, y - 2, tot - van, 4, v);
+    else
+      for (int x = van; x < tot; x += 16)
+        vlak(it, x, y - 1, std::min(8, tot - x), 2, v);
+  }
+  for (int i = 0; i < 3; i++) {
+    const int x = x0 + i * AFSTAND;
+    if (i < stap) {  // klaar: dicht bolletje met vinkje
+      it.filled_circle(x, y, R, v);
+      for (int d = 0; d < 3; d++) {
+        it.line(x - 7, y + d - 1, x - 2, y + 5 + d - 1, a);
+        it.line(x - 2, y + 5 + d - 1, x + 7, y - 5 + d - 1, a);
+      }
+    } else {  // bezig: dikke ring met stip; nog niet: dunne ring
+      for (int d = 0; d < (i == stap ? 4 : 2); d++)
+        it.circle(x, y, R - d, v);
+      if (i == stap)
+        it.filled_circle(x, y, 5, v);
+    }
+    tekst(it, x, y + R + 10, i == stap ? f.vet : f.normaal, v, a, TextAlign::TOP_CENTER, namen[i]);
+  }
+}
+
 inline void teken_slaapbalk(Display &it, const Staat &s, const Fonts &f) {
-  const bool wordt_wakker = s.slaap == WORDT_WAKKER;
   // Alleen zwart/wit: deze balk wordt met de snelle DU-modus getekend.
-  const Color a = wordt_wakker ? ZWART : WIT;
-  const Color v = wordt_wakker ? WIT : ZWART;
+  const Color a = WIT, v = ZWART;
   vlak(it, MARGE, KNOP_Y, BREED, KNOP_H, a);
   kader(it, MARGE, KNOP_Y, BREED, KNOP_H, 3, ZWART);
-  if (wordt_wakker) {
-    tekst(it, MARGE + 40, KNOP_Y + 14, f.groot, v, a, TextAlign::TOP_LEFT, "Even wakker worden…");
-    tekst(it, B - MARGE - 40, KNOP_Y + 40, f.normaal, v, a, TextAlign::TOP_RIGHT,
-          "verbinden met Home Assistant, een paar seconden");
+  if (s.slaap == WORDT_WAKKER) {
+    teken_zon(it, MARGE + 72, KNOP_Y + KNOP_H / 2, v);
+    tekst(it, MARGE + 130, KNOP_Y + 14, f.groot, v, a, TextAlign::TOP_LEFT, "Even wakker worden…");
+    teken_wekstappen(it, f, s.wek_stap, v, a);
   } else {
     // Maantje
     it.filled_circle(MARGE + 70, KNOP_Y + KNOP_H / 2, 30, v);
