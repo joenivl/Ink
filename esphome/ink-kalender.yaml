@@ -134,6 +134,14 @@ esphome:
               ink::ververs_mask() |= ink::VOL;
             else if (id(wekreden) == ink::WEK_GEBRUIKER)
               ink::ververs_mask() |= ink::BALK;  // "Even wakker worden…"
+        # Gewekt: meteen een tikje, zodat je weet dat hij eraan komt.
+        - if:
+            condition:
+              lambda: return id(wekreden) == ink::WEK_GEBRUIKER;
+            then:
+              - script.execute:
+                  id: geluid
+                  soort: 0  # tik
         - script.execute: ververs
         - if:
             condition:
@@ -976,6 +984,13 @@ script:
     then:
       - script.stop: ga_slapen
       - script.stop: stille_ronde_timeout
+      - if:
+          condition:
+            lambda: return ink::staat().slaap == ink::SLAAPT;
+          then:
+            - script.execute:
+                id: geluid
+                soort: 0  # tik
       - lambda: |-
           auto &s = ink::staat();
           if (s.slaap == ink::SLAAPT && s.data_ontvangen) {
