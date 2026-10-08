@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
     s.slaap = ink::SLAAPT;
   } else if (!std::strcmp(scenario, "wakker-worden")) {
     s.slaap = ink::WORDT_WAKKER;
+    s.wek_stap = 1;
   } else if (!std::strcmp(scenario, "accu-laag")) {
     s.accu = 12.0f;
     s.verbonden = false;

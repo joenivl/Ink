@@ -176,10 +176,15 @@ logger:
 api:
   # encryption: in je eigen ink-kalender.yaml (secret api_sleutel)
   on_client_connected:
-    - delay: 2s
-    # Vraag Home Assistant om de agenda te sturen.
-    - homeassistant.event:
-        event: esphome.ink_klaar
+    - lambda: |-
+        // Wakker worden: stap "Home Assistant" (niet voor bv. de logviewer).
+        auto &s = ink::staat();
+        if (s.slaap == ink::WORDT_WAKKER && s.wek_stap < 2 && client_info.find("Home Assistant") != std::string::npos) {
+          s.wek_stap = 2;
+          ink::ververs_mask() |= ink::BALK;
+        }
+    - script.execute: ververs
+    - script.execute: vraag_agenda
   actions:
     - action: toon_agenda
       variables:
@@ -232,6 +237,7 @@ api:
               if (ververst)
                 ink::ververs_mask() |= ink::VOL;
             } else if (s.slaap == ink::WORDT_WAKKER) {
+              ESP_LOGI("ink", "Agenda binnen %.1f s na het opstarten", millis() / 1000.0f);
               s.slaap = ink::WAKKER;
               id(net_wakker) = true;
               ink::ververs_mask() |= ink::VOL;
@@ -303,8 +309,19 @@ ota:
 
 wifi:
   # ssid, password en ap-password: in je eigen ink-kalender.yaml (secrets)
+  # Onthoudt kanaal en access point: na het wekken geen volledige scan (scheelt
+  # een paar seconden). Lukt het niet, dan scant hij alsnog.
+  fast_connect: true
   ap:
     ssid: Ink-Kalender
+  on_connect:
+    - lambda: |-
+        auto &s = ink::staat();
+        if (s.slaap == ink::WORDT_WAKKER && s.wek_stap < 1) {
+          s.wek_stap = 1;
+          ink::ververs_mask() |= ink::BALK;
+        }
+    - script.execute: ververs
 
 captive_portal:
 
@@ -953,6 +970,9 @@ script:
             ink::ververs_mask() |= ink::VOL;
           } else if (s.slaap == ink::SLAAPT) {
             s.slaap = ink::WORDT_WAKKER;
+            s.wek_stap = api::global_api_server->is_connected_with_state_subscription() ? 2
+                         : wifi::global_wifi_component->is_connected()                  ? 1
+                                                                                         : 0;
             ink::ververs_mask() |= ink::BALK;
           }
       - script.execute: ververs
@@ -964,6 +984,28 @@ script:
             - script.execute: klaar_met_wekken
           else:
             - script.execute: wakker_timeout
+
+  # Vraag Home Assistant om de agenda te sturen, zodra HA zich op events heeft
+  # geabonneerd (vlak na het verbinden; een event daarvoor komt nergens aan).
+  # Komt er tijdens het wekken niks, dan nog één keer vragen.
+  - id: vraag_agenda
+    mode: restart
+    then:
+      - wait_until:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          timeout: 5s
+      - delay: 300ms
+      - homeassistant.event:
+          event: esphome.ink_klaar
+      - delay: 8s
+      - if:
+          condition:
+            lambda: return ink::staat().slaap == ink::WORDT_WAKKER;
+          then:
+            - homeassistant.event:
+                event: esphome.ink_klaar
 
   - id: klaar_met_wekken
     then:

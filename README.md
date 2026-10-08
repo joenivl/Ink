@@ -260,7 +260,7 @@ Staat standaard **aan** (schakelaar **Spaarstand** bij het apparaat in HA).
 | Wat | Wat je ziet |
 |---|---|
 | Een minuut niets gedaan | Onderin verschijnt **"Slaapstand – tik twee keer op het scherm om te wekken"**; de agenda blijft gewoon zichtbaar (e-paper heeft geen stroom nodig om een beeld te houden). |
-| Dubbeltik op het scherm of druk op een knop | Onderin **"Even wakker worden…"**; na een paar seconden ververst het scherm en werkt alles. De dubbeltik waarmee je wekt telt niet als tik op een knop. Een enkele tik wekt hem niet. |
+| Dubbeltik op het scherm of druk op een knop | Onderin **"Even wakker worden…"** met de stappen wifi → Home Assistant → agenda; na een paar seconden ververst het scherm en werkt alles. De dubbeltik waarmee je wekt telt niet als tik op een knop. Een enkele tik wekt hem niet. |
 | Groene knop terwijl hij slaapt | Wordt wakker en begint daarna meteen met luisteren. |
 | Elke 2 uur | Wordt stil wakker, haalt de agenda op en ververst **alleen als er iets veranderd is**. Daarna weer slapen. Wek je hem zelf, dan haalt hij de agenda meteen op. |
 | 's Nachts (23:00–6:00) | Slaapt door tot 6:00. |
