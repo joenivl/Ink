@@ -164,6 +164,12 @@ esp32:
       # Geen geheugentest van het PSRAM bij elke start: na het wekken
       # sneller iets op het scherm.
       CONFIG_SPIRAM_MEMTEST: n
+      # Ruimte besparen (~60 KB), zonder merkbaar verschil: geen CA-bundel (we
+      # gebruiken geen https), foutcodes als getal in de log, en asserts zonder
+      # tekst (ze breken nog steeds af).
+      CONFIG_MBEDTLS_CERTIFICATE_BUNDLE: n
+      CONFIG_ESP_ERR_TO_NAME_LOOKUP: n
+      CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT: y
 
 # Layout en logica (C++), van GitHub zoals de rest van dit bestand.
 external_components:
