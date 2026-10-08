@@ -1235,4 +1235,6 @@ display:
       }
       const uint8_t mask = ink::ververs_mask();
       ink::ververs_mask() = 0;
+      const uint32_t begin = millis();
       ink::teken(it, s, {id(f_klein), id(f_normaal), id(f_vet), id(f_kop), id(f_groot), ${nep_vet}}, mask);
+      ESP_LOGD("ink", "Getekend in %u ms (masker %u)", (unsigned) (millis() - begin), mask);

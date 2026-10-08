@@ -107,6 +107,29 @@ const Color GRIJS_LICHT(225, 225, 225);
 const Color GRIJS(170, 170, 170);
 const Color GRIJS_DONKER(100, 100, 100);
 
+// Gevuld vlak. filled_rectangle tekent pixel voor pixel via draw_pixel_at, en
+// de IT8951 vraagt daar per pixel de klok op (waakhond). Bij grote vlakken,
+// zoals het witmaken van de notities of een groot venster, kost dat honderden
+// milliseconden. draw_pixels_at doet dat maar één keer per regel.
+inline void vlak(Display &it, int x, int y, int w, int h, Color c) {
+#ifdef INK_HOST
+  it.filled_rectangle(x, y, w, h, c);
+#else
+  if (w <= 0 || h <= 0)
+    return;
+  static uint8_t regel[B * 3];
+  w = std::min(w, B);
+  for (int i = 0; i < w * 3; i += 3) {
+    regel[i] = c.r;
+    regel[i + 1] = c.g;
+    regel[i + 2] = c.b;
+  }
+  for (int j = 0; j < h; j++)
+    it.draw_pixels_at(x, y + j, w, 1, regel, esphome::display::COLOR_ORDER_RGB, esphome::display::COLOR_BITNESS_888,
+                      true, 0, 0, 0);
+#endif
+}
+
 // ---------------------------------------------------------------- datum ---
 
 struct Datum {
@@ -688,7 +711,7 @@ inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
   for (int i = 0; i < 2; i++) {
     const bool actief = s.scherm == i;
     const Color a = actief ? ZWART : WIT;
-    it.filled_rectangle(tab_x(i), TAB_Y, TAB_B, TAB_H, a);
+    vlak(it, tab_x(i), TAB_Y, TAB_B, TAB_H, a);
     kader(it, tab_x(i), TAB_Y, TAB_B, TAB_H, 3, ZWART);
     tekst(it, tab_x(i) + TAB_B / 2, TAB_Y + 4, f.kop, actief ? WIT : ZWART, a, TextAlign::TOP_CENTER, TABS[i]);
   }
@@ -706,10 +729,10 @@ inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
     const int ix = xr - 52, iy = 36;
     const Color rand = laag ? ZWART : GRIJS_DONKER;
     kader(it, ix, iy, 46, 24, 2, rand);
-    it.filled_rectangle(ix + 46, iy + 7, 4, 10, rand);
+    vlak(it, ix + 46, iy + 7, 4, 10, rand);
     const int vul = std::max(0, std::min(40, pct * 40 / 100));
     if (vul > 0)
-      it.filled_rectangle(ix + 3, iy + 3, vul, 18, rand);
+      vlak(it, ix + 3, iy + 3, vul, 18, rand);
     xr = ix - 36;
     if (laag) {
       tekst(it, xr, 28, f.vet, ZWART, WIT, TextAlign::TOP_RIGHT, "opladen!");
@@ -738,10 +761,10 @@ inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
     const std::string waarschuwing = !s.verbonden ? "Geen verbinding" : "Wacht op agenda…";
     const int w = breedte(it, f.vet, waarschuwing) + 28;
     const int x = TAB_X - w - 20;
-    it.filled_rectangle(x, TAB_Y + 4, w, TAB_H - 8, ZWART);
+    vlak(it, x, TAB_Y + 4, w, TAB_H - 8, ZWART);
     tekst(it, x + 14, TAB_Y + 10, f.vet, WIT, ZWART, TextAlign::TOP_LEFT, waarschuwing);
   }
-  it.filled_rectangle(MARGE, KOP_H, BREED, 3, ZWART);
+  vlak(it, MARGE, KOP_H, BREED, 3, ZWART);
 }
 
 // Hoogte die een afspraak in de weekkolom inneemt (en tekent als teken=true).
@@ -751,7 +774,7 @@ inline int week_afspraak(Display &it, const Fonts &f, const Afspraak &a, int x, 
     auto regels = omloop(it, f.normaal, a.titel, w - 16, w - 16, 2);
     const int h = static_cast<int>(regels.size()) * REGEL + 10;
     if (teken) {
-      it.filled_rectangle(x, y, w, h, GRIJS_LICHT);
+      vlak(it, x, y, w, h, GRIJS_LICHT);
       for (size_t i = 0; i < regels.size(); i++)
         tekst(it, x + 8, y + 1 + i * REGEL, f.normaal, ZWART, GRIJS_LICHT, TextAlign::TOP_LEFT, regels[i]);
     }
@@ -786,7 +809,7 @@ struct Pen {
       it.line(x(x1), y(y1) + d, x(x2), y(y2) + d, k);
     }
   }
-  void balk(int px, int py, int w, int h) const { it.filled_rectangle(x(px), y(py), r(w), std::max(2, h * m / 10), k); }
+  void balk(int px, int py, int w, int h) const { vlak(it, x(px), y(py), r(w), std::max(2, h * m / 10), k); }
 };
 
 // Wolkje rond (0, 0); `rand` maakt hem zoveel pixels groter.
@@ -794,7 +817,7 @@ inline void teken_wolk(const Pen &p, int dy, int rand = 0) {
   p.cirkel(-11, dy + 5, 8, rand);
   p.cirkel(1, dy - 2, 12, rand);
   p.cirkel(13, dy + 5, 8, rand);
-  p.it.filled_rectangle(p.x(-11), p.y(dy + 5), p.r(25), p.r(9) + rand, p.k);
+  vlak(p.it, p.x(-11), p.y(dy + 5), p.r(25), p.r(9) + rand, p.k);
 }
 
 inline void teken_zon(const Pen &p, int px, int py, int pr) {
@@ -862,7 +885,7 @@ inline void teken_week(Display &it, const Staat &s, const Fonts &f) {
 
     const Color kop_achter = is_vandaag ? ZWART : GRIJS_LICHT;
     const Color kop_tekst = is_vandaag ? WIT : ZWART;
-    it.filled_rectangle(x, WEEK_Y, w, WEEK_KOP_H, kop_achter);
+    vlak(it, x, WEEK_Y, w, WEEK_KOP_H, kop_achter);
     // Dagnaam groot, datum klein eronder
     tekst(it, x + 14, WEEK_Y - 2, f.kop, kop_tekst, kop_achter, TextAlign::TOP_LEFT, DAG_LANG[i]);
     char buf[24];
@@ -942,7 +965,7 @@ inline void teken_maand(Display &it, const Staat &s, const Fonts &f) {
     }
     if (is_vandaag) {
       const int nb = breedte(it, f.kop, buf) + 20;
-      it.filled_rectangle(x + 1, y + 1, nb, 40, ZWART);
+      vlak(it, x + 1, y + 1, nb, 40, ZWART);
       tekst(it, x + 10, y + 1, f.kop, WIT, ZWART, TextAlign::TOP_LEFT, buf);
     } else {
       tekst(it, x + 10, y + 1, f.kop, deze_maand ? ZWART : GRIJS, WIT, TextAlign::TOP_LEFT, buf);
@@ -966,7 +989,7 @@ inline void teken_maand(Display &it, const Staat &s, const Fonts &f) {
       const Afspraak &a = *lijst[i];
       const std::string regel = a.tijd.empty() ? a.titel : a.tijd + " " + a.titel;
       if (a.tijd.empty()) {
-        it.filled_rectangle(x + 4, ty + 8, MAAND_KOL - 8, REGEL - 2, GRIJS_LICHT);
+        vlak(it, x + 4, ty + 8, MAAND_KOL - 8, REGEL - 2, GRIJS_LICHT);
         tekst(it, x + 10, ty, f.normaal, kleur, GRIJS_LICHT, TextAlign::TOP_LEFT,
               afkappen(it, f.normaal, regel, MAAND_KOL - 22));
       } else {
@@ -1005,7 +1028,7 @@ inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
         TextAlign::TOP_LEFT, "tik om af te vinken, nog eens tikken zet hem terug");
   for (int k = 0; k < NOTITIE_KOLOMMEN; k++) {
     const int x = MARGE + k * (NOTITIE_KOL_B + NOTITIE_TUSSEN);
-    it.filled_rectangle(x, NOTITIE_TOP, NOTITIE_KOL_B, 2, ZWART);
+    vlak(it, x, NOTITIE_TOP, NOTITIE_KOL_B, 2, ZWART);
     for (int r = 1; r <= NOTITIE_PER_KOLOM; r++)
       it.horizontal_line(x, NOTITIE_TOP + r * NOTITIE_REGEL, NOTITIE_KOL_B, GRIJS);
   }
@@ -1037,7 +1060,7 @@ inline void teken_notities(Display &it, const Staat &s, const Fonts &f) {
     const std::string t = afkappen(it, f.normaal, n.tekst, NOTITIE_KOL_B - 54);
     tekst(it, x + 46, y + 10, f.normaal, ZWART, WIT, TextAlign::TOP_LEFT, t);
     if (n.afgevinkt)
-      it.filled_rectangle(x + 44, y + 29, breedte(it, f.normaal, t) + 4, 3, ZWART);
+      vlak(it, x + 44, y + 29, breedte(it, f.normaal, t) + 4, 3, ZWART);
   }
 }
 
@@ -1046,12 +1069,12 @@ inline int ha_knop_x(int i) { return MARGE + SPREEK_B + KNOP_TUSSEN + i * (HA_KN
 inline void teken_microfoon(Display &it, int mx, int my, Color voor, Color achter) {
   for (int d = 0; d < 3; d++)
     it.circle(mx, my - 2, 22 + d, voor);
-  it.filled_rectangle(mx - 26, my - 30, 52, 28, achter);  // bovenste helft van de boog weg
-  it.filled_rectangle(mx - 11, my - 34, 22, 40, voor);
+  vlak(it, mx - 26, my - 30, 52, 28, achter);  // bovenste helft van de boog weg
+  vlak(it, mx - 11, my - 34, 22, 40, voor);
   it.filled_circle(mx, my - 34, 11, voor);
   it.filled_circle(mx, my + 6, 11, voor);
-  it.filled_rectangle(mx - 2, my + 20, 4, 18, voor);
-  it.filled_rectangle(mx - 14, my + 36, 28, 4, voor);
+  vlak(it, mx - 2, my + 20, 4, 18, voor);
+  vlak(it, mx - 14, my + 36, 28, 4, voor);
 }
 
 inline void teken_slaapbalk(Display &it, const Staat &s, const Fonts &f) {
@@ -1059,7 +1082,7 @@ inline void teken_slaapbalk(Display &it, const Staat &s, const Fonts &f) {
   // Alleen zwart/wit: deze balk wordt met de snelle DU-modus getekend.
   const Color a = wordt_wakker ? ZWART : WIT;
   const Color v = wordt_wakker ? WIT : ZWART;
-  it.filled_rectangle(MARGE, KNOP_Y, BREED, KNOP_H, a);
+  vlak(it, MARGE, KNOP_Y, BREED, KNOP_H, a);
   kader(it, MARGE, KNOP_Y, BREED, KNOP_H, 3, ZWART);
   if (wordt_wakker) {
     tekst(it, MARGE + 40, KNOP_Y + 14, f.groot, v, a, TextAlign::TOP_LEFT, "Even wakker worden…");
@@ -1077,7 +1100,7 @@ inline void teken_slaapbalk(Display &it, const Staat &s, const Fonts &f) {
 }
 
 inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
-  it.filled_rectangle(0, BALK_Y, B, H - BALK_Y, WIT);
+  vlak(it, 0, BALK_Y, B, H - BALK_Y, WIT);
   it.horizontal_line(MARGE, BALK_Y, BREED, ZWART);
   if (s.slaap != WAKKER) {
     teken_slaapbalk(it, s, f);
@@ -1097,7 +1120,7 @@ inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
   }
   const Color achter = actief ? ZWART : WIT;
   const Color voor = actief ? WIT : ZWART;
-  it.filled_rectangle(MARGE, KNOP_Y, SPREEK_B, KNOP_H, achter);
+  vlak(it, MARGE, KNOP_Y, SPREEK_B, KNOP_H, achter);
   kader(it, MARGE, KNOP_Y, SPREEK_B, KNOP_H, 4, ZWART);
   teken_microfoon(it, MARGE + 56, KNOP_Y + KNOP_H / 2, voor, achter);
   tekst(it, MARGE + 108, KNOP_Y + (hint.empty() ? 30 : 12), f.kop, voor, achter, TextAlign::TOP_LEFT, label);
@@ -1113,7 +1136,7 @@ inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
     const int x = ha_knop_x(i);
     const Color a = k.aan ? ZWART : WIT;
     const Color v = k.aan ? WIT : ZWART;
-    it.filled_rectangle(x, KNOP_Y, HA_KNOP_B, KNOP_H, a);
+    vlak(it, x, KNOP_Y, HA_KNOP_B, KNOP_H, a);
     kader(it, x, KNOP_Y, HA_KNOP_B, KNOP_H, 3, ZWART);
     auto regels = omloop(it, f.kop, k.naam, HA_KNOP_B - 24, HA_KNOP_B - 24, 2);
     const int regel_h = 34;
@@ -1127,7 +1150,7 @@ inline void teken_balk(Display &it, const Staat &s, const Fonts &f) {
 inline void venster_knop(Display &it, const Fonts &f, int x, const char *label, bool gevuld,
                          int y = VENSTER_KNOP_Y) {
   const Color a = gevuld ? ZWART : WIT;
-  it.filled_rectangle(x, y, VENSTER_KNOP_B, VENSTER_KNOP_H, a);
+  vlak(it, x, y, VENSTER_KNOP_B, VENSTER_KNOP_H, a);
   kader(it, x, y, VENSTER_KNOP_B, VENSTER_KNOP_H, 4, ZWART);
   tekst(it, x + VENSTER_KNOP_B / 2, y + 26, f.kop, gevuld ? WIT : ZWART, a, TextAlign::TOP_CENTER, label);
 }
@@ -1152,7 +1175,7 @@ inline void teken_dagoverzicht(Display &it, const Staat &s, const Fonts &f) {
     if (a.datum == s.dag_gekozen)
       lijst.push_back(&a);
   int y = GROOT_Y + 120;
-  it.filled_rectangle(x, y, w, 2, ZWART);
+  vlak(it, x, y, w, 2, ZWART);
   if (lijst.empty()) {
     tekst(it, x, y + 20, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, "Geen afspraken");
     return;
@@ -1194,7 +1217,7 @@ inline void teken_details(Display &it, const Staat &s, const Fonts &f) {
     y += 48;
   }
   y += 14;
-  it.filled_rectangle(x, y, w, 2, ZWART);
+  vlak(it, x, y, w, 2, ZWART);
   y += 22;
   if (!d.geladen || !d.fout.empty()) {
     tekst(it, x, y, f.kop, ZWART, WIT, TextAlign::TOP_LEFT, d.geladen ? d.fout : "Even ophalen…");
@@ -1229,7 +1252,7 @@ inline void teken_details(Display &it, const Staat &s, const Fonts &f) {
 
 inline void teken_groot_venster(Display &it, const Staat &s, const Fonts &f) {
   venster_vakken().clear();
-  it.filled_rectangle(GROOT_X, GROOT_Y, GROOT_B, GROOT_H, WIT);
+  vlak(it, GROOT_X, GROOT_Y, GROOT_B, GROOT_H, WIT);
   kader(it, GROOT_X, GROOT_Y, GROOT_B, GROOT_H, 6, ZWART);
   if (s.status == DAG)
     teken_dagoverzicht(it, s, f);
@@ -1245,7 +1268,7 @@ inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
     teken_groot_venster(it, s, f);
     return;
   }
-  it.filled_rectangle(VENSTER_X, VENSTER_Y, VENSTER_B, VENSTER_H, WIT);
+  vlak(it, VENSTER_X, VENSTER_Y, VENSTER_B, VENSTER_H, WIT);
   kader(it, VENSTER_X, VENSTER_Y, VENSTER_B, VENSTER_H, 6, ZWART);
   const int x = VENSTER_X + 60;
   const int w = VENSTER_B - 120;
@@ -1314,7 +1337,7 @@ inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
   if (mask & BALK)
     teken_balk(it, s, f);
   if ((mask & NOTITIES) && s.scherm == SCHERM_WEEK) {
-    it.filled_rectangle(0, NOTITIE_Y - 12, B, NOTITIE_EIND - NOTITIE_Y + 14, WIT);
+    vlak(it, 0, NOTITIE_Y - 12, B, NOTITIE_EIND - NOTITIE_Y + 14, WIT);
     teken_notities(it, s, f);
     // Een open venster mag er niet door overschreven worden.
     if (venster_open(s))
