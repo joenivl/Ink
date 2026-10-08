@@ -365,6 +365,14 @@ inline std::vector<Afspraak> lees_afspraken(const std::string &tekst) {
     af.titel = zonder_onbekende_iconen(af.titel);
     uit.push_back(af);
   }
+  // Per dag: hele dag (en meerdaagse) bovenaan, daarna van vroeg naar laat.
+  std::stable_sort(uit.begin(), uit.end(), [](const Afspraak &x, const Afspraak &y) {
+    if (!(x.datum == y.datum))
+      return dagnummer(x.datum) < dagnummer(y.datum);
+    if (x.tijd.empty() != y.tijd.empty())
+      return x.tijd.empty();
+    return x.tijd < y.tijd;
+  });
   return uit;
 }
 

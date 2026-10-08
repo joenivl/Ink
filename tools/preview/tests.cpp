@@ -35,8 +35,8 @@ int main() {
       "2026-10-06||Lege tijd\n"
       "2026-10-07|10:00|Titel met | streep");
   assert(lijst.size() == 4);
-  assert(lijst[0].tijd == "09:30" && lijst[0].titel == "Pilates");
-  assert(lijst[1].tijd.empty() && lijst[1].titel == "Elise jarig");
+  assert(lijst[0].tijd.empty() && lijst[0].titel == "Elise jarig");  // hele dag eerst
+  assert(lijst[1].tijd == "09:30" && lijst[1].titel == "Pilates");
   assert(lijst[2].tijd.empty() && lijst[2].titel == "Lege tijd");
   assert(lijst[3].titel == "Titel met | streep");
   assert(lees_afspraken("").empty());
@@ -231,6 +231,12 @@ int main() {
   assert(inhoud_hash(a) == inhoud_hash(b));
   b.notities[0].afgevinkt = true;
   assert(inhoud_hash(a) != inhoud_hash(b));
+
+  // Sortering: per dag hele dag eerst, dan op tijd (ongeacht de volgorde van HA)
+  {
+    auto l = lees_afspraken("2026-10-09~a|08:00|C\n2026-10-08~z|19:00|B\n2026-10-08~b|08:00|A\n2026-10-08~c|-|Hele dag");
+    assert(l.size() == 4 && l[0].titel == "Hele dag" && l[1].titel == "A" && l[2].titel == "B" && l[3].titel == "C");
+  }
 
   // Alleen het verschil verversen: veranderde dagkolom en/of notities
   {
