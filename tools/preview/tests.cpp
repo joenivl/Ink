@@ -232,6 +232,31 @@ int main() {
   b.notities[0].afgevinkt = true;
   assert(inhoud_hash(a) != inhoud_hash(b));
 
+  // Alleen het verschil verversen: veranderde dagkolom en/of notities
+  {
+    Staat w;
+    w.vandaag = {2026, 10, 8};  // donderdag
+    w.afspraken = lees_afspraken("2026-10-06|10:00|Tandarts\n2026-10-08|16:00|Zwemles");
+    const auto voor = week_hashes(w);
+    ververs_mask() = 0;
+    ververs_gebied() = {};
+    ververs_verschil(w, w.vandaag, voor, false);
+    assert(ververs_mask() == 0);  // niets veranderd: niets tekenen
+    w.afspraken = lees_afspraken("2026-10-06|10:00|Tandarts\n2026-10-08|16:00|Zwemles\n2026-10-08|19:00|Eten");
+    ververs_verschil(w, w.vandaag, voor, false);
+    assert(ververs_mask() == GEBIED);
+    const Gebied g = ververs_gebied();
+    assert(g.x0 == MARGE + 3 * WEEK_KOL - 5 && g.x1 == g.x0 + WEEK_KOL);  // alleen donderdag
+    assert(g.y0 == WEEK_Y && g.y1 == WEEK_EIND);
+    ververs_verschil(w, w.vandaag, voor, true);  // en de notities erbij
+    assert(ververs_gebied().x0 == 0 && ververs_gebied().y1 == NOTITIE_EIND + 2);
+    ververs_mask() = 0;
+    ververs_verschil(w, {2026, 10, 7}, voor, false);  // nieuwe dag: alles
+    assert(ververs_mask() & VOL);
+    ververs_mask() = 0;
+    ververs_gebied() = {};
+  }
+
   // UTF-8
   const std::string s = "café";
   assert(utf8_terug(s, s.size()) == 3);

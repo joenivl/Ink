@@ -53,9 +53,11 @@ zie [Preview en tests](#preview-en-tests).*
 - De spraakherkenning loopt via de normale **Assist-pijplijn** van HA (Whisper of HA Cloud).
 - Een **AI-taak** (`ai_task.generate_data`) maakt van de zin een afspraak. Begrippen
   als "volgende week dinsdag" en "half drie" worden zo goed opgepakt.
-- Het scherm ververst alleen als er iets verandert. Een volledige verversing
-  (grijstinten, knippert ~1 s) volgt bij nieuwe agenda-data en om middernacht. Knoppen
-  en pop-ups gebruiken de snelle DU-modus.
+- Het scherm ververst alleen als er iets verandert, en alleen dat stuk: bij een nieuwe
+  afspraak alleen die dagkolom, bij een notitie alleen de notities, bij het sluiten van
+  een venster alleen wat eronder stond (grijstinten, knippert dan alleen daar). Een
+  volledige verversing volgt bij een nieuwe dag, na het wekken en op het maandscherm.
+  Knoppen en pop-ups gebruiken de snelle DU-modus.
 
 ## Bestanden
 

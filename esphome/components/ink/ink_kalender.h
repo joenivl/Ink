@@ -28,6 +28,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -102,6 +103,7 @@ constexpr uint8_t VOL = 1;      // alles, GC16 (mooi grijs, knippert)
 constexpr uint8_t BALK = 2;     // alleen knoppenbalk, DU (snel)
 constexpr uint8_t VENSTER = 4;  // alleen pop-upvenster, DU (snel)
 constexpr uint8_t NOTITIES = 8; // alleen notitievakken, DU (snel)
+constexpr uint8_t GEBIED = 16;  // alles, maar alleen binnen ververs_gebied(), GC16 (knippert alleen daar)
 
 const Color ZWART(0, 0, 0);
 const Color WIT(255, 255, 255);
@@ -129,13 +131,20 @@ inline void vlak(Display &it, int x, int y, int w, int h, Color c) {
 #ifdef INK_HOST
   it.filled_rectangle(x, y, w, h, c);
 #else
-  const int x0 = std::max(x, 0), y0 = std::max(y, 0);
-  const int x1 = std::min(x + w, it.get_width()), y1 = std::min(y + h, it.get_height());
+  int x0 = std::max(x, 0), y0 = std::max(y, 0);
+  int x1 = std::min(x + w, it.get_width()), y1 = std::min(y + h, it.get_height());
+  const auto clip = it.get_clipping();
+  if (clip.is_set()) {
+    x0 = std::max(x0, static_cast<int>(clip.x));
+    y0 = std::max(y0, static_cast<int>(clip.y));
+    x1 = std::min(x1, static_cast<int>(clip.x2()));
+    y1 = std::min(y1, static_cast<int>(clip.y2()));
+  }
   if (x1 <= x0 || y1 <= y0)
     return;
   // Het enige scherm is een IT8951 (zie ink-kalender.yaml).
   auto &d = static_cast<esphome::it8951::IT8951Display &>(it);
-  if (!Framebuffer::grijs(d) || it.get_clipping().is_set() || Framebuffer::buffer(d) == nullptr) {
+  if (!Framebuffer::grijs(d) || Framebuffer::buffer(d) == nullptr) {
     it.filled_rectangle(x0, y0, x1 - x0, y1 - y0, c);
     return;
   }
@@ -536,6 +545,27 @@ inline Staat &staat() {
 inline uint8_t &ververs_mask() {
   static uint8_t m = 0;
   return m;
+}
+
+// Rechthoek die met GEBIED opnieuw getekend wordt; meerdere worden samengevoegd.
+struct Gebied {
+  int x0{0}, y0{0}, x1{0}, y1{0};
+  bool leeg() const { return x1 <= x0 || y1 <= y0; }
+};
+
+inline Gebied &ververs_gebied() {
+  static Gebied g;
+  return g;
+}
+
+inline void ververs_ook(int x, int y, int w, int h) {
+  auto &g = ververs_gebied();
+  if (g.leeg()) {
+    g = {x, y, x + w, y + h};
+  } else {
+    g = {std::min(g.x0, x), std::min(g.y0, y), std::max(g.x1, x + w), std::max(g.y1, y + h)};
+  }
+  ververs_mask() |= GEBIED;
 }
 
 inline bool venster_open(const Staat &s) {
@@ -1402,8 +1432,22 @@ inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
   nep[0] = f.nep_vet ? f.vet : nullptr;
   nep[1] = f.nep_vet ? f.kop : nullptr;
   nep[2] = f.nep_vet ? f.groot : nullptr;
-  if (mask & VOL) {
-    it.fill(WIT);
+  // GEBIED: alles opnieuw, maar alleen binnen de rechthoek (de rest van de
+  // framebuffer klopt al), zodat alleen dat stuk knippert.
+  Gebied g;
+  if ((mask & GEBIED) && !(mask & VOL)) {
+    g = ververs_gebied();
+    if (g.leeg())
+      mask &= ~GEBIED;
+  }
+  ververs_gebied() = {};
+  if (mask & (VOL | GEBIED)) {
+    if (mask & VOL) {
+      it.fill(WIT);
+    } else {
+      it.start_clipping(g.x0, g.y0, g.x1, g.y1);
+      vlak(it, g.x0, g.y0, g.x1 - g.x0, g.y1 - g.y0, WIT);
+    }
     vakken().clear();
     teken_kop(it, s, f);
     if (s.scherm == SCHERM_MAAND) {
@@ -1415,6 +1459,8 @@ inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
     teken_balk(it, s, f);
     if (venster_open(s))
       teken_venster(it, s, f);
+    if (!(mask & VOL))
+      it.end_clipping();
     return;
   }
   if (mask & BALK)
@@ -1517,6 +1563,60 @@ inline uint32_t inhoud_hash(const Staat &s) {
                 s.verbonden ? 1 : 0);
   voeg_toe(buf);
   return h;
+}
+
+// Waar het venster staat (om bij het sluiten alleen dat stuk te verversen).
+inline Gebied venster_gebied(const Staat &s) {
+  if (s.status == DAG || s.status == DETAILS)
+    return {GROOT_X, GROOT_Y, GROOT_X + GROOT_B, GROOT_Y + GROOT_H};
+  return {VENSTER_X, VENSTER_Y, VENSTER_X + VENSTER_B, VENSTER_Y + VENSTER_H};
+}
+
+inline void ververs_ook(const Gebied &g) { ververs_ook(g.x0, g.y0, g.x1 - g.x0, g.y1 - g.y0); }
+
+// Per dag van de getoonde week een hash van wat er in die kolom staat.
+inline std::array<uint32_t, 7> week_hashes(const Staat &s) {
+  std::array<uint32_t, 7> uit{};
+  const Datum maandag = plus_dagen(s.vandaag, -weekdag(s.vandaag));
+  auto voeg_toe = [](uint32_t &h, const std::string &t) {
+    for (unsigned char c : t)
+      h = (h ^ c) * 16777619u;
+    h = (h ^ 0xFF) * 16777619u;
+  };
+  for (int i = 0; i < 7; i++) {
+    const Datum dag = plus_dagen(maandag, i);
+    uint32_t h = 2166136261u;
+    for (const auto &a : s.afspraken)
+      if (a.datum == dag) {
+        voeg_toe(h, a.tijd);
+        voeg_toe(h, a.titel);
+      }
+    for (const auto &w : s.weer)
+      if (w.datum == dag) {
+        voeg_toe(h, std::to_string(static_cast<int>(w.icoon)));
+        voeg_toe(h, w.max);
+        voeg_toe(h, w.min);
+      }
+    uit[i] = h;
+  }
+  return uit;
+}
+
+// Nieuwe agenda/notities binnen terwijl het scherm wakker is: alleen de
+// veranderde dagkolommen en/of de notities verversen. Een andere dag, het
+// maandscherm of iets onverwachts: alles.
+inline void ververs_verschil(const Staat &s, const Datum &oude_dag, const std::array<uint32_t, 7> &voor,
+                             bool notities_anders) {
+  if (s.scherm != SCHERM_WEEK || !(s.vandaag == oude_dag)) {
+    ververs_mask() |= VOL;
+    return;
+  }
+  const auto na = week_hashes(s);
+  for (int i = 0; i < 7; i++)
+    if (na[i] != voor[i])
+      ververs_ook(MARGE + i * WEEK_KOL - 5, WEEK_Y, WEEK_KOL, WEEK_EIND - WEEK_Y);
+  if (notities_anders)
+    ververs_ook(0, NOTITIE_Y - 12, B, NOTITIE_EIND - NOTITIE_Y + 14);
 }
 
 // Slaapduur tot de volgende stille ronde: elke `elke_min` minuten, maar 's nachts
