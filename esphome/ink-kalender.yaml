@@ -1296,8 +1296,8 @@ font:
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
-    # Iconen in titels en notities (zwart-wit emoji), alleen in dit font: alle
-    # titels en notities staan in f_normaal, en meer past niet in de app-partitie.
+    # Iconen in titels en notities (zwart-wit emoji), alleen in f_normaal en f_kop
+    # (meer past niet in de app-partitie); de andere fonts lenen ze van die twee.
     # Andere emoji haalt de firmware weg; houd de lijst gelijk aan ICONEN in
     # ink_kalender.h.
     extras: &iconen
@@ -1329,6 +1329,7 @@ font:
     bpp: 4
     glyphsets: [GF_Latin_Core]
     ignore_missing_glyphs: true
+    extras: *iconen
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_groot
     size: 52
