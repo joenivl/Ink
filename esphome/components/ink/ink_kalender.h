@@ -104,6 +104,7 @@ constexpr uint8_t BALK = 2;     // alleen knoppenbalk, DU (snel)
 constexpr uint8_t VENSTER = 4;  // alleen pop-upvenster, DU (snel)
 constexpr uint8_t NOTITIES = 8; // alleen notitievakken, DU (snel)
 constexpr uint8_t GEBIED = 16;  // alles, maar alleen binnen ververs_gebied(), GC16 (knippert alleen daar)
+constexpr uint8_t TABS = 32;    // alleen de tabs Week/Maand, DU (snel)
 
 const Color ZWART(0, 0, 0);
 const Color WIT(255, 255, 255);
@@ -772,6 +773,21 @@ inline void kader(Display &it, int x, int y, int w, int h, int dikte, Color kleu
 
 inline int tab_x(int i) { return TAB_X + i * TAB_B; }
 
+// Tabs "Week" / "Maand" (alleen zwart/wit, dus ook met DU te tekenen)
+inline void teken_tabs(Display &it, const Staat &s, const Fonts &f) {
+  static const char *const NAMEN[] = {"Week", "Maand"};
+  for (int i = 0; i < 2; i++) {
+    const bool actief = s.scherm == i;
+    const Color a = actief ? ZWART : WIT;
+    vlak(it, tab_x(i), TAB_Y, TAB_B, TAB_H, a);
+    kader(it, tab_x(i), TAB_Y, TAB_B, TAB_H, 3, ZWART);
+    tekst(it, tab_x(i) + TAB_B / 2, TAB_Y + 4, f.kop, actief ? WIT : ZWART, a, TextAlign::TOP_CENTER, NAMEN[i]);
+  }
+}
+
+// Wissel week/maand: alles tussen kop en knoppenbalk (kop en balk blijven gelijk).
+inline void ververs_inhoud() { ververs_ook(0, KOP_H + 3, B, std::max(NOTITIE_EIND + 2, GRID_EIND) - KOP_H - 3); }
+
 inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
   // Met een waarschuwing ernaast de korte datum, anders past het niet
   const bool waarschuwing_zichtbaar = !s.verbonden || !s.data_ontvangen;
@@ -785,16 +801,7 @@ inline void teken_kop(Display &it, const Staat &s, const Fonts &f) {
     datum = datum_lang(s.vandaag);
   }
   tekst(it, MARGE, 4, f.groot, ZWART, WIT, TextAlign::TOP_LEFT, datum);
-
-  // Tabs
-  static const char *const TABS[] = {"Week", "Maand"};
-  for (int i = 0; i < 2; i++) {
-    const bool actief = s.scherm == i;
-    const Color a = actief ? ZWART : WIT;
-    vlak(it, tab_x(i), TAB_Y, TAB_B, TAB_H, a);
-    kader(it, tab_x(i), TAB_Y, TAB_B, TAB_H, 3, ZWART);
-    tekst(it, tab_x(i) + TAB_B / 2, TAB_Y + 4, f.kop, actief ? WIT : ZWART, a, TextAlign::TOP_CENTER, TABS[i]);
-  }
+  teken_tabs(it, s, f);
 
   // Rechts, van rechts naar links: accu, temperatuur, weeknummer
   char buf[48];
@@ -1471,6 +1478,8 @@ inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
       it.end_clipping();
     return;
   }
+  if (mask & TABS)
+    teken_tabs(it, s, f);
   if (mask & BALK)
     teken_balk(it, s, f);
   if ((mask & NOTITIES) && s.scherm == SCHERM_WEEK) {

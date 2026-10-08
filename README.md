@@ -55,8 +55,10 @@ zie [Preview en tests](#preview-en-tests).*
   als "volgende week dinsdag" en "half drie" worden zo goed opgepakt.
 - Het scherm ververst alleen als er iets verandert, en alleen dat stuk: bij een nieuwe
   afspraak alleen die dagkolom, bij een notitie alleen de notities, bij het sluiten van
-  een venster alleen wat eronder stond (grijstinten, knippert dan alleen daar). Een
-  volledige verversing volgt bij een nieuwe dag, na het wekken en op het maandscherm.
+  een venster alleen wat eronder stond, bij wisselen tussen week en maand eerst de tabs en
+  dan alleen het stuk tussen kop en knoppen (grijstinten, knippert dan alleen daar). Een
+  volledige verversing volgt bij een nieuwe dag, na het wekken en bij nieuwe agenda op
+  het maandscherm.
   Knoppen en pop-ups gebruiken de snelle DU-modus.
 
 ## Bestanden
