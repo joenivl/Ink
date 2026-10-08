@@ -154,12 +154,14 @@ eventueel een weer-entiteit (bijv. Buienradar of Met.no).
 
 **Weer:** het scherm toont de verwachting van vandaag tot en met zondag; voor de
 voorbije dagen van deze week blijft de laatste verwachting staan (iets lichter,
-bewaard tijdens de slaap, niet na stroomverlies). Om
+ook na een herstart of stroomverlies). Om
 niet steeds te knipperen neemt het een nieuwe verwachting alleen over in een
 nieuw tijdvak van `weer_elke` uur (standaard 6: vanaf 0, 6, 12 en 18 uur; met de
 spaarstand is dat de eerste ronde daarna, dus rond 6:00, 12:00 en 18:00), en
 alleen als er echt iets veranderd is. Dat zijn dus hooguit drie extra volledige
-verversingen per dag.
+verversingen per dag. Ververst het scherm toch al, omdat de agenda of de
+notities veranderd zijn of omdat je hem wekt, dan komt het nieuwste weer gewoon
+mee.
 
 ## Bediening
 

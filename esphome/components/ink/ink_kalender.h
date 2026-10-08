@@ -1529,7 +1529,9 @@ inline std::string met_verleden(const std::string &oud, const std::string &nieuw
 // Neemt `nieuw` over als er nog geen weer staat of als het een nieuw tijdvak
 // is (en houdt de voorbije dagen van deze week). Geeft true als het getoonde
 // weer verandert.
-inline bool neem_weer_over(WeerGeheugen &g, const std::string &nieuw, int vak) {
+// `altijd`: ook binnen hetzelfde tijdvak, omdat het scherm toch al ververst
+// (de agenda of de notities zijn veranderd).
+inline bool neem_weer_over(WeerGeheugen &g, const std::string &nieuw, int vak, bool altijd = false) {
   std::string t = met_verleden(g.tekst, nieuw, vak >= 0 ? vak / 100 : -1);
   if (t.size() >= sizeof(g.tekst)) {
     t.resize(sizeof(g.tekst) - 1);
@@ -1537,7 +1539,7 @@ inline bool neem_weer_over(WeerGeheugen &g, const std::string &nieuw, int vak) {
   }
   if (t == g.tekst)
     return false;
-  if (g.tekst[0] != '\0' && !t.empty() && vak >= 0 && vak == g.vak)
+  if (!altijd && g.tekst[0] != '\0' && !t.empty() && vak >= 0 && vak == g.vak)
     return false;  // in dit tijdvak al overgenomen
   std::snprintf(g.tekst, sizeof(g.tekst), "%s", t.c_str());
   g.vak = vak;
