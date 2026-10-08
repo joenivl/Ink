@@ -50,6 +50,10 @@ script:
             value_template: "{{ 'bijgewerkt' in uit.stdout }}"
         then:
           - action: automation.reload
+          # Meteen opnieuw naar het scherm sturen (als het wakker is), zodat je
+          # de nieuwe blueprint direct ziet en niet pas bij de volgende ronde.
+          - delay: 2
+          - event: esphome.ink_klaar
 
 automation:
   - id: ink_bijwerken
