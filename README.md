@@ -157,7 +157,7 @@ voorbije dagen van deze week blijft de laatste verwachting staan (iets lichter,
 ook na een herstart of stroomverlies). Om
 niet steeds te knipperen neemt het een nieuwe verwachting alleen over in een
 nieuw tijdvak van `weer_elke` uur (standaard 6: vanaf 0, 6, 12 en 18 uur; met de
-spaarstand is dat de eerste ronde daarna, dus rond 6:00, 12:00 en 18:00), en
+spaarstand is dat de eerste ronde daarna), en
 alleen als er echt iets veranderd is. Dat zijn dus hooguit drie extra volledige
 verversingen per dag. Ververst het scherm toch al, omdat de agenda of de
 notities veranderd zijn of omdat je hem wekt, dan komt het nieuwste weer gewoon
@@ -262,17 +262,19 @@ Staat standaard **aan** (schakelaar **Spaarstand** bij het apparaat in HA).
 | Een minuut niets gedaan | Onderin verschijnt **"Slaapstand – tik twee keer op het scherm om te wekken"**; de agenda blijft gewoon zichtbaar (e-paper heeft geen stroom nodig om een beeld te houden). |
 | Dubbeltik op het scherm of druk op een knop | Onderin **"Even wakker worden…"**; na een paar seconden ververst het scherm en werkt alles. De dubbeltik waarmee je wekt telt niet als tik op een knop. Een enkele tik wekt hem niet. |
 | Groene knop terwijl hij slaapt | Wordt wakker en begint daarna meteen met luisteren. |
-| Elk half uur | Wordt stil wakker, haalt de agenda op en ververst **alleen als er iets veranderd is**. Daarna weer slapen. |
+| Elke 2 uur | Wordt stil wakker, haalt de agenda op en ververst **alleen als er iets veranderd is**. Daarna weer slapen. Wek je hem zelf, dan haalt hij de agenda meteen op. |
 | 's Nachts (23:00–6:00) | Slaapt door tot 6:00. |
 | Inspreken of een open venster | Gaat pas slapen als je klaar bent. |
 
 In te stellen bovenin `ink-kalender.yaml`: `wakker_na_gebruik`, `wekker_elke`,
 `nacht_van`/`nacht_tot` en `touch_wekt`.
 
-**Geschatte accuduur met spaarstand: 2–4 weken.** Dat is een schatting op basis van
-de metingen hierboven: ±35 stille rondes per dag van ~15 s, ~10 keer per dag
+**Geschatte accuduur met spaarstand: 3–5 weken.** Dat is een schatting op basis van
+de metingen hierboven: ±9 stille rondes per dag van ~15 s, ~10 keer per dag
 gewekt en een minuut gebruikt, en een touch-chip die aan blijft om te kunnen wekken.
-Met `touch_wekt: "false"` (alleen wekken met de knoppen) eerder 5–7 weken. Bekijk de
+Met `touch_wekt: "false"` (alleen wekken met de knoppen) eerder 6–9 weken. Wil je
+nieuwe afspraken van anderen sneller zien, zet `wekker_elke` dan lager (bijv. "30"),
+dat kost wel accu. Bekijk de
 echte waarde na een paar dagen in de geschiedenis van *Accu*.
 
 **Goed om te weten:**
