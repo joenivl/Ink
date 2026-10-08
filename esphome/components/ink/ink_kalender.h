@@ -680,10 +680,10 @@ inline BaseFont *(&nep_vette_fonts())[3] {
   return f;
 }
 
-// Alleen f_normaal en f_kop hebben de iconen (meer past niet in flash). De
-// andere fonts lenen ze: {font zonder, font met}; gezet door teken().
-inline std::pair<BaseFont *, BaseFont *> (&iconen_lenen())[3] {
-  static std::pair<BaseFont *, BaseFont *> p[3] = {};
+// f_normaal, f_kop en f_groot hebben de iconen; klein en vet lenen ze (dat
+// scheelt flash): {font zonder, font met}; gezet door teken().
+inline std::pair<BaseFont *, BaseFont *> (&iconen_lenen())[2] {
+  static std::pair<BaseFont *, BaseFont *> p[2] = {};
   return p;
 }
 
@@ -1511,7 +1511,6 @@ inline void teken_venster(Display &it, const Staat &s, const Fonts &f) {
 inline void teken(Display &it, const Staat &s, const Fonts &f, uint8_t mask) {
   iconen_lenen()[0] = {f.klein, f.normaal};
   iconen_lenen()[1] = {f.vet, f.normaal};
-  iconen_lenen()[2] = {f.groot, f.kop};
   auto &nep = nep_vette_fonts();
   nep[0] = f.nep_vet ? f.vet : nullptr;
   nep[1] = f.nep_vet ? f.kop : nullptr;

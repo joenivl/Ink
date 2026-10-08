@@ -1288,16 +1288,25 @@ font:
     id: f_klein
     size: 22
     bpp: 4
-    glyphsets: [GF_Latin_Core]
+    # Letters en leestekens: ASCII, alle West-Europese accenten (Latin-1) en
+    # typografische tekens. Kleiner dan GF_Latin_Core, zodat de iconen ook in
+    # het grote font passen.
+    glyphs: &tekens [
+          ' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO',
+          'PQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~',
+          '¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑ',
+          'ÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ',
+          '–—‘’‚“”„…•€™',
+        ]
     ignore_missing_glyphs: true
   - file: gfonts://${lettertype}@400
     id: f_normaal
     size: 26
     bpp: 4
-    glyphsets: [GF_Latin_Core]
+    glyphs: *tekens
     ignore_missing_glyphs: true
-    # Iconen in titels en notities (zwart-wit emoji), alleen in f_normaal en f_kop
-    # (meer past niet in de app-partitie); de andere fonts lenen ze van die twee.
+    # Iconen in titels en notities (zwart-wit emoji) in f_normaal, f_kop en
+    # f_groot; f_klein en f_vet lenen ze van f_normaal (dat scheelt ruimte).
     # Andere emoji haalt de firmware weg; houd de lijst gelijk aan ICONEN in
     # ink_kalender.h.
     extras: &iconen
@@ -1321,21 +1330,22 @@ font:
     id: f_vet
     size: 26
     bpp: 4
-    glyphsets: [GF_Latin_Core]
+    glyphs: *tekens
     ignore_missing_glyphs: true
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_kop
     size: 34
     bpp: 4
-    glyphsets: [GF_Latin_Core]
+    glyphs: *tekens
     ignore_missing_glyphs: true
     extras: *iconen
   - file: gfonts://${lettertype}@${lettertype_vet}
     id: f_groot
     size: 52
     bpp: 4
-    glyphsets: [GF_Latin_Core]
+    glyphs: *tekens
     ignore_missing_glyphs: true
+    extras: *iconen
 
 display:
   - platform: it8951
