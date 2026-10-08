@@ -379,6 +379,9 @@ globals:
   - id: net_wakker
     type: bool
     initial_value: "false"
+  - id: wissel_inhoud  # week/maand gewisseld: na de tabs nog de inhoud
+    type: bool
+    initial_value: "false"
   # Meting na het wekken (ms na het opstarten): klaar met opstarten, balk getekend
   - id: opgestart_ms
     type: uint32_t
@@ -917,9 +920,20 @@ script:
           auto &s = ink::staat();
           if (s.scherm != scherm) {
             s.scherm = static_cast<ink::Scherm>(scherm);
-            ink::ververs_mask() |= ink::VOL;
+            // Eerst meteen de tabs (snel), daarna alleen het stuk tussen kop en
+            // knoppenbalk (grijs, knippert alleen daar). Met een venster open: alles.
+            id(wissel_inhoud) = !ink::venster_open(s);
+            ink::ververs_mask() |= id(wissel_inhoud) ? ink::TABS : ink::VOL;
           }
       - script.execute: ververs
+      - if:
+          condition:
+            lambda: return id(wissel_inhoud);
+          then:
+            - lambda: |-
+                id(wissel_inhoud) = false;
+                ink::ververs_inhoud();
+            - script.execute: ververs
       - if:
           condition:
             lambda: return scherm != ink::SCHERM_WEEK;

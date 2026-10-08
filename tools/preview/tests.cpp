@@ -263,6 +263,12 @@ int main() {
     ververs_gebied() = {};
   }
 
+  // Week/maand wisselen: alleen tussen kop en knoppenbalk
+  ververs_inhoud();
+  assert(ververs_mask() == GEBIED && ververs_gebied().y0 == KOP_H + 3 && ververs_gebied().y1 <= BALK_Y);
+  ververs_mask() = 0;
+  ververs_gebied() = {};
+
   // UTF-8
   const std::string s = "café";
   assert(utf8_terug(s, s.size()) == 3);
