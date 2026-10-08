@@ -212,6 +212,8 @@ int main() {
   assert(slaapduur_ms(2, 30, 30, 23, 6) == 210u * 60 * 1000);
   assert(slaapduur_ms(6, 0, 30, 23, 6) == 30u * 60 * 1000);
   assert(slaapduur_ms(-1, 0, 30, 23, 6) == 30u * 60 * 1000);  // tijd onbekend
+  assert(slaapduur_ms(14, 0, 120, 23, 6) == 120u * 60 * 1000);  // standaard: elke 2 uur
+  assert(slaapduur_ms(22, 30, 120, 23, 6) == 120u * 60 * 1000); // wordt 0:30 wakker, slaapt dan door tot 6:00
   assert(slaapduur_ms(1, 0, 30, 0, 6) == 300u * 60 * 1000);   // nacht zonder middernacht-overgang
 
   // Inhoud-hash: verandert met de agenda en de datum, niet met de schermstatus

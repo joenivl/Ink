@@ -54,7 +54,7 @@ substitutions:
   # nachts door van `nacht_van` tot `nacht_tot` uur. Wekken: dubbeltik of knop.
   spaarstand_bij_start: RESTORE_DEFAULT_ON
   wakker_na_gebruik: 60s
-  wekker_elke: "30"
+  wekker_elke: "120"  # minuten; lager = nieuwe afspraken sneller, maar meer accu
   nacht_van: "23"
   nacht_tot: "6"
   # Zet op "false" als het scherm meteen weer wakker wordt (dan alleen de knoppen).
